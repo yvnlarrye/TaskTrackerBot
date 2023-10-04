@@ -3,7 +3,6 @@ import json
 from data import sqlite_db
 from data.config import CONFIG
 from dispatcher import bot
-from utils.utils import get_json_file_contents
 from aiogram.utils.markdown import hlink
 
 
@@ -59,20 +58,20 @@ async def update_report_tracker():
         json.dump(reports_count_data, json_file, ensure_ascii=False, indent=4)
 
 
-async def check_report_tracker():
-    old_reports_count_data = get_json_file_contents('data/rating_data.json')
-    reports_count_data = {}
-    members = await sqlite_db.get_users()
-    for member in members:
-        user_id = member[0]
-        reports_count = await sqlite_db.count_user_reports(user_id)
-        reports_count[f'{user_id}'] = reports_count_data
-    for key, value in old_reports_count_data:
-        if key in reports_count_data and key in old_reports_count_data:
-            user_id = int(key)
-            user_rate = await sqlite_db.get_user_points(user_id)
-            if value > old_reports_count_data[key]:
-                user_rate += 1
-            else:
-                user_rate -= 1
-            await sqlite_db.update_user_points(user_id, user_rate)
+# async def check_report_tracker():
+#     old_reports_count_data = get_json_file_contents('data/rating_data.json')
+#     reports_count_data = {}
+#     members = await sqlite_db.get_users()
+#     for member in members:
+#         user_id = member[0]
+#         reports_count = await sqlite_db.count_user_reports(user_id)
+#         reports_count[f'{user_id}'] = reports_count_data
+#     for key, value in old_reports_count_data:
+#         if key in reports_count_data and key in old_reports_count_data:
+#             user_id = int(key)
+#             user_rate = await sqlite_db.get_user_points(user_id)
+#             if value > old_reports_count_data[key]:
+#                 user_rate += 1
+#             else:
+#                 user_rate -= 1
+#             await sqlite_db.update_user_points(user_id, user_rate)

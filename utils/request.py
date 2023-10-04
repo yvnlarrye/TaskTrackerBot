@@ -3,15 +3,17 @@ import re
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State
 from aiogram.types import CallbackQuery, Message
+from aiogram.utils.exceptions import MessageNotModified
 
 from data import sqlite_db
 from data.config import REQUEST_STATUS, CONFIG
 from keyboards import keyboards as kb
 from states import SessionRole
-from utils.utils import format_addressers, format_recipients
+from utils.utils import format_addressers, format_recipients, get_status_icon
 from dispatcher import bot
 from utils.validators import validate_date, parse_time, validate_time
 from datetime import datetime
+from aiogram.utils.markdown import hlink
 
 
 async def request_from_user(cb: CallbackQuery, state: FSMContext):
@@ -136,22 +138,31 @@ async def request_time(msg: Message, state: FSMContext):
                          f'Например: {datetime.now().strftime("%H:%M")}')
 
 
-def print_request(request_id: int, status: int, addressers: list, main_recipient: str,
+def print_request(request_id: int, status: int, addressers: list, main_recipient: tuple,
                   secondary_recipients: list, text: str, date: str, time: str):
+    addr_output = '\n'.join([
+        f"{get_status_icon(addresser[3])} {hlink(f'{addresser[1]} {addresser[2]}', f'https://t.me/{addresser[0]}')} — {addresser[3]}"
+        for addresser in addressers
+    ])
+    main_recipient_output = f"{get_status_icon(main_recipient[3])} {hlink(f'{main_recipient[1]} {main_recipient[2]}', f'https://t.me/{main_recipient[0]}')} — {main_recipient[3]}"
+    secondary_recipients_output = '\n'.join([
+        f"{get_status_icon(recipient[3])} {hlink(f'{recipient[1]} {recipient[2]}', f'https://t.me/{recipient[0]}')} — {recipient[3]}"
+        for recipient in secondary_recipients
+    ])
     result = f"Запрос #{request_id}\n\n" \
              f"<b>Статус:</b>\n" \
              f"{status}\n" \
              f"\n" \
              f"<b>От кого:</b>\n" \
-             f"{', '.join(['@' + addresser for addresser in addressers])}\n" \
+             f"{addr_output}\n" \
              f"\n" \
              f"<b>Кому:</b>\n" \
              f"\n" \
              f"Основной исполнитель:\n" \
-             f"@{main_recipient}\n" \
+             f"{main_recipient_output}\n" \
              f"\n" \
              f"Дополнительные исполнители:\n" \
-             f"{', '.join(['@' + recipient for recipient in secondary_recipients])}\n" \
+             f"{secondary_recipients_output}\n" \
              f"\n" \
              f"<b>Запрос:</b>\n" \
              f"{text}\n" \
@@ -189,5 +200,7 @@ async def update_request_message(request_id):
     message_id = curr_request[8]
     new_output = print_request(request_id, req_status, addressers, main_recipient,
                                secondary_recipients, text, date, time)
-
-    await bot.edit_message_text(text=new_output, chat_id=CONFIG['request_channel'], message_id=message_id)
+    try:
+        await bot.edit_message_text(text=new_output, chat_id=CONFIG['request_channel'], message_id=message_id)
+    except MessageNotModified:
+        pass

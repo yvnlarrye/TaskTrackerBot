@@ -22,7 +22,8 @@ def create_tables():
         "username    TEXT    UNIQUE,"
         "first_name  TEXT    NOT NULL,"
         "surname     TEXT    NOT NULL,"
-        "points      REAL    DEFAULT (0)"
+        "points      REAL    DEFAULT (0),"
+        "status      TEXT    DEFAULT White NOT NULL"
         ")"
     )
     cur.execute(
@@ -325,6 +326,13 @@ async def get_member_by_username(username: str):
         "SELECT * FROM users WHERE username = ?", (username,)
     )
     return result.fetchone()
+
+
+async def get_user_status_by_id(user_id: int):
+    result = cur.execute(
+        "SELECT status FROM users WHERE id = ?", (user_id,)
+    )
+    return result.fetchone()[0]
 
 
 async def close():

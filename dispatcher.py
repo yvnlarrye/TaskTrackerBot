@@ -12,8 +12,3 @@ bot = Bot(token=BOT_TOKEN,
           disable_web_page_preview=True)
 
 dp = Dispatcher(bot=bot, storage=storage)
-
-
-
-
-

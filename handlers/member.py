@@ -3,15 +3,17 @@ import asyncio
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.types import (
-    Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
+    Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 )
 
 from dispatcher import dp, bot
 from keyboards import keyboards as kb
 from keyboards.keyboards import apply_tasks_kb
 from utils.reports import print_report, update_report_data
-from utils.request import request_to_user, request_from_user, commit_request, request_date, print_request, \
-    update_request_message, request_time
+from utils.request import (
+    request_to_user, request_from_user, commit_request, request_date,
+    print_request, update_request_message, request_time
+)
 from utils.utils import (
     format_recipients, format_addressers, commit_report, delete_prev_message, refresh_role
 )
@@ -155,10 +157,17 @@ async def confirm_creating_request(cb: CallbackQuery, state: FSMContext):
     await commit_request(data)
     author_id = await sqlite_db.get_user_id(data['author_telegram_id'])
     request_id = (await sqlite_db.get_user_last_request_id(author_id))[0]
-    members = await sqlite_db.get_users()
-    addressers = [members[user_index][3] for user_index in data['request_from']]
-    main_recipient = members[data['main_recipient']][3]
-    secondary_recipients = [members[user_index][3] for user_index in data['secondary_recipients']]
+    users = data['curr_users']
+    addressers = [
+        (users[user_index][3], users[user_index][4], users[user_index][5], users[user_index][7],)
+        for user_index in data['request_from']
+    ]
+    main_recipient = users[data['main_recipient']]
+    main_recipient = (main_recipient[3], main_recipient[4], main_recipient[5], main_recipient[7],)
+    secondary_recipients = [
+        (users[user_index][3], users[user_index][4], users[user_index][5], users[user_index][7],)
+        for user_index in data['secondary_recipients']
+    ]
     output = print_request(request_id=request_id,
                            status=REQUEST_STATUS['in_progress'],
                            addressers=addressers,
@@ -185,7 +194,7 @@ async def edit_request_by_member(msg: Message, state: FSMContext):
     await state.update_data(role_state=(await state.get_state()).split(':')[1])
     requests = await sqlite_db.get_user_requests(user_id)
     if len(requests):
-        await state.update_data(user_id=user_id)
+        await state.update_data(user_id=user_id, reqs=requests)
         await msg.answer('Выберите запрос для редактирования:',
                          reply_markup=(await kb.users_requests_kb(requests)))
         await EditRequest.select_member_request.set()
@@ -198,7 +207,9 @@ async def edit_request_by_member(msg: Message, state: FSMContext):
 async def select_member_request(cb: CallbackQuery, state: FSMContext):
     req_index = int(cb.data[4:])
     await cb.message.delete()
-    await state.update_data(req_index=req_index)
+    data = await state.get_data()
+    requests = data['reqs']
+    await state.update_data(req=requests[req_index])
     await cb.message.answer('Выберите поле запроса, которое хотите отредактировать:',
                             reply_markup=(await kb.request_headers_kb()))
     await EditRequest.select_request_headers.set()
@@ -242,8 +253,7 @@ async def edit_request_status(cb: CallbackQuery, state: FSMContext):
     status = int(cb.data[4:])
     await cb.message.delete()
     data = await state.get_data()
-    requests = await sqlite_db.get_user_requests(data['user_id'])
-    curr_request = requests[data['req_index']]
+    curr_request = data['req']
     request_id = curr_request[0]
     request_status = curr_request[2]
 
@@ -291,10 +301,9 @@ async def edit_addressers(cb: CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(text='next_step', state=EditRequest.addressers)
 async def confirm_edit_addressers(cb: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    members = await sqlite_db.get_users()
-    requests = await sqlite_db.get_user_requests(data['user_id'])
-    request_id = requests[data['req_index']][0]
-    addressers = '\n'.join([members[user_index][3] for user_index in data['request_from']])
+    users = data['curr_users']
+    request_id = data['req'][0]
+    addressers = '\n'.join([users[user_index][3] for user_index in data['request_from']])
     await sqlite_db.update_request_addressers(request_id, addressers)
 
     await update_request_message(request_id)
@@ -316,14 +325,12 @@ async def confirm_edit_recipients(cb: CallbackQuery, state: FSMContext):
     if 'request_to' not in data or len(data['request_to']) == 0:
         await cb.message.answer('Необходимо выбрать хотя бы одного исполнителя')
     else:
-        members = await sqlite_db.get_users()
-        requests = await sqlite_db.get_user_requests(data['user_id'])
-        request_id = requests[data['req_index']][0]
-        main_recipient = members[data['main_recipient']][3]
-        secondary_recipients = '\n'.join([members[user_index][3] for user_index in data['secondary_recipients']])
+        users = data['curr_users']
+        request_id = data['req'][0]
+        main_recipient = users[data['main_recipient']][3]
+        secondary_recipients = '\n'.join([users[user_index][3] for user_index in data['secondary_recipients']])
         await sqlite_db.update_request_recipients(request_id, main_recipient, secondary_recipients)
         await update_request_message(request_id)
-
         await cb.message.answer('Получатели успешно изменены.',
                                 reply_markup=kb.member_menu_kb)
         await cb.message.delete()
@@ -334,8 +341,7 @@ async def confirm_edit_recipients(cb: CallbackQuery, state: FSMContext):
 async def edit_text(msg: Message, state: FSMContext):
     text = msg.text
     data = await state.get_data()
-    requests = await sqlite_db.get_user_requests(data['user_id'])
-    request_id = requests[data['req_index']][0]
+    request_id = data['req'][0]
     await sqlite_db.update_request_text(request_id, text)
 
     await update_request_message(request_id)

@@ -1,18 +1,10 @@
-import ujson
 from aiogram.dispatcher import FSMContext
 from aiogram.utils.exceptions import MessageToDeleteNotFound
 
 from data import sqlite_db
 from dispatcher import bot
 from states import SessionRole
-import datetime
-
-
-def get_json_file_contents(file_name: str) -> dict:
-    json_file = open(file_name, encoding='utf-8')
-    json_data = ujson.load(json_file)
-    json_file.close()
-    return json_data
+from data.config import STATUS
 
 
 async def is_admin(telegram_id: int) -> bool:
@@ -110,4 +102,13 @@ async def delete_prev_message(chat_id, state: FSMContext):
             await bot.delete_message(chat_id=chat_id, message_id=data['msg'].message_id)
         except MessageToDeleteNotFound:
             pass
+
+
+def get_status_icon(status: str):
+    match status:
+        case 'Silver': return STATUS['silver']['icon']
+        case 'Gold': return STATUS['gold']['icon']
+        case 'Diamond': return STATUS['diamond']['icon']
+        case 'Black': return STATUS['black']['icon']
+        case _: return STATUS['white']['icon']
 

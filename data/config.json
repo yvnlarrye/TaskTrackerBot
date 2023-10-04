@@ -6,5 +6,27 @@
         "in_progress": "🔄 — В процессе",
         "done": "✅ — Выполнено"
     },
-    "password": "123"
+    "password": "123",
+    "status": {
+        "white": {
+            "value": "White",
+            "icon": "⚪️"
+        },
+        "silver": {
+            "value": "Silver",
+            "icon": "🥈"
+        },
+        "gold": {
+            "value": "Gold",
+            "icon": "🥇"
+        },
+        "diamond": {
+            "value": "Diamond",
+            "icon": "💎"
+        },
+        "black": {
+            "value": "Black",
+            "icon": "👑"
+        }
+    }
 }
