@@ -32,7 +32,7 @@ async def print_report(report_id: int, user: tuple, earned: str,
     return result
 
 
-async def update_report_data(report_id: int):
+async def update_report_message(report_id: int):
     curr_report = await sqlite_db.get_report_by_id(report_id)
 
     user = await sqlite_db.get_user_by_id(curr_report[1])

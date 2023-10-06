@@ -5,19 +5,20 @@ from aiogram.dispatcher.filters import Text
 from aiogram.types import (
     Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 )
+from aiogram.utils.markdown import hlink
 
 from dispatcher import dp, bot
 from keyboards import keyboards as kb
 from keyboards.keyboards import apply_tasks_kb
-from utils.reports import print_report, update_report_data
+from utils.reports import print_report, update_report_message
 from utils.request import (
     request_to_user, request_from_user, commit_request, request_date,
     print_request, update_request_message, request_time
 )
 from utils.utils import (
-    format_recipients, format_addressers, commit_report, delete_prev_message, refresh_role
+    format_recipients, format_addressers, commit_report, delete_prev_message, get_status_icon
 )
-from states import SessionRole, CreateRequest, CreateReport, UserEdition, EditRequest, EditReport
+from states import SessionRole, CreateRequest, CreateReport, UserEdition, EditRequest, EditReport, Goals
 from datetime import datetime
 
 from utils.validators import parse_time, validate_time
@@ -37,8 +38,9 @@ async def member_start(msg: Message, state: FSMContext):
                                                       CreateRequest.time, CreateRequest.date,
                                                       CreateReport.earned,
                                                       EditRequest.date, EditRequest.text,
-                                                      EditRequest.status,
-                                                      EditReport.earned])
+                                                      EditRequest.status, EditReport.earned,
+                                                      Goals.days, Goals.media, Goals.check_amount,
+                                                      Goals.notion_link, Goals.comment])
 async def back_to_member_menu(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     await member_start(msg, state)
@@ -555,7 +557,7 @@ async def edit_phone_time(msg: Message, state: FSMContext):
         report_id = report[0]
         await sqlite_db.update_report_earned(report_id, result)
 
-        await update_report_data(report_id)
+        await update_report_message(report_id)
 
         await msg.answer('<b>Заработанная сумма</b> успешно изменена',
                          reply_markup=kb.member_menu_kb)
@@ -587,7 +589,7 @@ async def apply_edition_done_tasks(cb: CallbackQuery, state: FSMContext):
     report_id = data['rep'][0]
     await sqlite_db.update_report_done_tasks(report_id, done_tasks)
 
-    await update_report_data(report_id)
+    await update_report_message(report_id)
 
     await cb.message.answer('Выполненные задания успешно изменены',
                             reply_markup=kb.member_menu_kb)
@@ -616,7 +618,7 @@ async def apply_edition_not_done_tasks(cb: CallbackQuery, state: FSMContext):
     report_id = data['rep'][0]
     await sqlite_db.update_report_not_done_tasks(report_id, not_done_tasks)
 
-    await update_report_data(report_id)
+    await update_report_message(report_id)
 
     await cb.message.answer('<b>Не выполненные задания</b> успешно изменены',
                             reply_markup=kb.member_menu_kb)
@@ -645,8 +647,124 @@ async def apply_edition_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
     report_id = data['rep'][0]
     await sqlite_db.update_report_scheduled_tasks(report_id, scheduled_tasks)
 
-    await update_report_data(report_id)
+    await update_report_message(report_id)
 
     await cb.message.answer('<b>Запланированные задания</b> успешно изменены',
                             reply_markup=kb.member_menu_kb)
     await SessionRole.member.set()
+
+
+@dp.message_handler(text='✅ Закрытые цели', state=SessionRole.member)
+async def completed_goals(msg: Message, state: FSMContext):
+    await delete_prev_message(msg.from_id, state)
+    m = await msg.answer('Отправьте ссылку на ноушен:',
+                         reply_markup=kb.prev_step_reply_kb)
+    await state.update_data(msg=m)
+    await Goals.notion_link.set()
+
+
+@dp.message_handler(state=Goals.notion_link)
+async def listening_notion_link(msg: Message, state: FSMContext):
+    input_text = msg.text
+    if not (input_text.startswith('https://www.notion.so') or input_text.startswith('www.notion.so')):
+        await msg.answer('Неверный формат ввода. Попробуйте еще раз.\n'
+                         'Ссылка должна начинаться с https://www.notion.so',
+                         reply_markup=kb.prev_step_reply_kb)
+    else:
+        await state.update_data(notion_link=input_text.strip())
+        await delete_prev_message(msg.from_id, state)
+        m = await msg.answer('💰Введите сумму закрытия в ₽:',
+                             reply_markup=kb.prev_step_reply_kb)
+        await state.update_data(msg=m)
+        await Goals.check_amount.set()
+
+
+@dp.message_handler(state=Goals.check_amount)
+async def listening_check_amount(msg: Message, state: FSMContext):
+    try:
+        check_amount = int(msg.text)
+        await delete_prev_message(msg.from_id, state)
+        m = await msg.answer('📆 За какое кол-во дней закрыли цель?',
+                             reply_markup=kb.prev_step_reply_kb)
+        await state.update_data(msg=m, check_amount=check_amount)
+        await Goals.days.set()
+    except ValueError:
+        await msg.answer('Неверный формат ввода. Попробуйте еще раз.',
+                         reply_markup=kb.prev_step_reply_kb)
+
+
+@dp.message_handler(state=Goals.days)
+async def listening_days_count(msg: Message, state: FSMContext):
+    try:
+        days = int(msg.text)
+        await delete_prev_message(msg.from_id, state)
+        m = await msg.answer('📷 Прикрепите видео или фото, относящееся к цели:',
+                             reply_markup=kb.prev_step_reply_kb)
+        await state.update_data(msg=m, days=days)
+        await Goals.media.set()
+    except ValueError:
+        await msg.answer('Неверный формат ввода. Попробуйте еще раз.',
+                         reply_markup=kb.prev_step_reply_kb)
+
+
+@dp.message_handler(state=Goals.days)
+async def listening_days_count(msg: Message, state: FSMContext):
+    try:
+        days = int(msg.text)
+        await delete_prev_message(msg.from_id, state)
+        m = await msg.answer('📷 Прикрепите видео или фото, относящееся к цели:',
+                             reply_markup=kb.prev_step_reply_kb)
+        await state.update_data(msg=m, days=days)
+        await Goals.media.set()
+    except ValueError:
+        await msg.answer('Неверный формат ввода. Попробуйте еще раз.',
+                         reply_markup=kb.prev_step_reply_kb)
+
+
+@dp.message_handler(state=Goals.media, content_types=['video', 'photo'])
+async def listening_video(msg: Message, state: FSMContext):
+    await msg.delete()
+    await delete_prev_message(msg.from_id, state)
+
+    if msg.photo:
+        await state.update_data(file_photo=msg.photo[0].file_id)
+    elif msg.video:
+        await state.update_data(file_video=msg.video.file_id)
+
+    m = await msg.answer('💬 Укажите комментарий:',
+                         reply_markup=kb.prev_step_reply_kb)
+    await state.update_data(msg=m)
+    await Goals.comment.set()
+
+
+@dp.message_handler(state=Goals.comment)
+async def listening_comment(msg: Message, state: FSMContext):
+    await delete_prev_message(msg.from_id, state)
+    data = await state.get_data()
+    user_id = await sqlite_db.get_user_id(msg.from_id)
+    user = await sqlite_db.get_user_by_id(user_id)
+    surname = user[5]
+    first_name = user[4]
+    user_name = user[3]
+    user_status = user[7]
+    user_output = f"{get_status_icon(user_status)} {hlink(f'{first_name} {surname}', f'https://t.me/{user_name}')} — {user_status}"
+    caption = f"{user_output}\n\n" \
+              f"<b>Notion:</b>\n{data['notion_link']}\n\n" \
+              f"💰<b>Сумма закрытия:</b> {data['check_amount']}\n\n" \
+              f"📆 <b>Кол-во дней:</b> {data['days']}\n\n" \
+              f"💬 <b>Комментарий:</b>\n- {msg.text}"
+
+    if 'file_photo' in data:
+        await bot.send_photo(chat_id=CONFIG['goals_channel'],
+                             photo=data['file_photo'],
+                             caption=caption)
+    elif 'file_video' in data:
+        await bot.send_video(chat_id=CONFIG['goals_channel'],
+                             video=data['file_video'],
+                             caption=caption)
+
+    m = await msg.answer('Отчёт о выполненной цели добавлен ✅',
+                         reply_markup=kb.member_menu_kb)
+    await state.update_data(msg=m)
+    await SessionRole.member.set()
+

@@ -1,6 +1,6 @@
 from aiogram.dispatcher import FSMContext
 from aiogram.types import Message
-from data.config import PASS
+from data.config import PASS, STATUS
 from dispatcher import dp
 from states import SessionRole, UserEdition
 from utils.utils import is_admin
@@ -77,7 +77,7 @@ async def login_as_admin(msg: Message, state: FSMContext):
     await msg.delete()
 
 
-@dp.message_handler(text='🏠Выйти', state='*')
+@dp.message_handler(text='🏠 Выйти', state='*')
 async def back_to_main_menu(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     await start(msg, state)
@@ -89,7 +89,7 @@ async def week_rating(msg: Message, state: FSMContext):
     members = reversed(await sqlite_db.get_users_sorted_by_points())
     result_list = []
     for member in members:
-        result_list.append(f'{member[5]} {member[4]} @{member[3]} — 🎯{member[6]}')
+        result_list.append(f"{STATUS[str(member[7]).lower()]['icon']} {member[5]} {member[4]} @{member[3]} — 🎯{member[6]}")
     result = '\n'.join(result_list)
     await msg.answer('<b>Имя — Баллы:</b>\n' + result,
                      reply_markup=kb.prev_step_reply_kb)

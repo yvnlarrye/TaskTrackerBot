@@ -6,8 +6,10 @@ from aiogram.types import (
 )
 from dispatcher import dp, bot
 from keyboards import keyboards as kb
+from utils.reports import update_report_message
+from utils.request import update_request_message
 
-from utils.utils import is_admin
+from utils.utils import is_admin, requestContainsUser
 from data import sqlite_db
 from states import SessionRole, UserEdition, Channel, Points, EditRequest
 from data.config import CONFIG, STATUS
@@ -35,6 +37,7 @@ async def back_to_admin_menu(msg: Message, state: FSMContext):
 @dp.callback_query_handler(text='prev_step', state=[Points.add, Points.reduce, Channel.choose,
                                                     Channel.listening_request_channel,
                                                     Channel.listening_report_channel,
+                                                    Channel.listening_goals_channel,
                                                     EditRequest.remove,
                                                     UserEdition.remove_member,
                                                     UserEdition.edit_status])
@@ -302,7 +305,7 @@ async def listening_points_amount_to_reduce(msg: Message, state: FSMContext):
                          'Например: 5 или 2.5')
 
 
-@dp.message_handler(text='↪️Каналы', state=SessionRole.admin)
+@dp.message_handler(text='↪️ Каналы', state=SessionRole.admin)
 async def channels_action(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     await msg.answer('Выберите, какой канал хотите изменить:',
@@ -345,7 +348,27 @@ async def listening_report_channel(msg: Message):
     CONFIG['report_channel'] = channel_id
     with open('data/config.json', 'w', encoding='utf-8') as json_file:
         json.dump(CONFIG, json_file, ensure_ascii=False, indent=4)
-    await msg.answer('Канал запросов успешно обновлен',
+    await msg.answer('Канал отчётности успешно обновлен',
+                     reply_markup=kb.admin_menu_kb)
+    await SessionRole.admin.set()
+
+
+@dp.callback_query_handler(text='edit_goals_channel', state=Channel.choose)
+async def change_goals_channel(cb: CallbackQuery):
+    await cb.message.delete()
+    await cb.message.answer('Вы пытаетесь изменить канал закрытых целей ✅\n'
+                            'Перешлите любое сообщение из канала:',
+                            reply_markup=kb.prev_step_kb)
+    await Channel.listening_goals_channel.set()
+
+
+@dp.message_handler(state=Channel.listening_goals_channel)
+async def listening_goals_channel(msg: Message):
+    channel_id = msg.forward_from_chat.id
+    CONFIG['goals_channel'] = channel_id
+    with open('data/config.json', 'w', encoding='utf-8') as json_file:
+        json.dump(CONFIG, json_file, ensure_ascii=False, indent=4)
+    await msg.answer('Канал закрытых целей успешно обновлен',
                      reply_markup=kb.admin_menu_kb)
     await SessionRole.admin.set()
 
@@ -438,8 +461,20 @@ async def finish_user_status_edition(cb: CallbackQuery, state: FSMContext):
     users = data['curr_users']
     user = users[data['user_index']]
     user_id = user[0]
-    new_status = STATUS[STATUS.keys()[status_index]]['value']
+    new_status = STATUS[list(STATUS.keys())[status_index]]['value']
     await sqlite_db.update_user_status(user_id, new_status)
+
+    user_reports = await sqlite_db.get_user_requests(user_id)
+    for report in user_reports:
+        report_id = report[0]
+        await update_report_message(report_id)
+
+    all_requests = await sqlite_db.get_all_requests()
+    for request in all_requests:
+        if requestContainsUser(request, user):
+            request_id = request[0]
+            await update_request_message(request_id)
+
     await cb.message.answer(f'Статус пользователя @{user[3]} успешно обновлён.',
                             reply_markup=kb.admin_menu_kb)
     await SessionRole.admin.set()

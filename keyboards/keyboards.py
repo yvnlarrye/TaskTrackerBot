@@ -27,7 +27,9 @@ member_menu_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     KeyboardButton('✏️ Ред. запрос'),
     KeyboardButton('✏️ Ред. отчётность')
 ).add(
-    KeyboardButton('🏠Выйти')
+    KeyboardButton('✅ Закрытые цели')
+).add(
+    KeyboardButton('🏠 Выйти')
 )
 
 admin_menu_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
@@ -40,8 +42,8 @@ admin_menu_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     KeyboardButton('⛔👨‍💻 Удалить участника'),
     KeyboardButton('⛔📝 Удалить запрос')
 ).add(
-    KeyboardButton('🏠Выйти'),
-    KeyboardButton('↪️Каналы')
+    KeyboardButton('🏠 Выйти'),
+    KeyboardButton('↪️ Каналы')
 )
 
 points_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
@@ -50,8 +52,11 @@ points_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
 )
 
 channels_kb = InlineKeyboardMarkup().add(
-    InlineKeyboardButton(text='📝 Запросы', callback_data='edit_request_channel'),
+    InlineKeyboardButton(text='📝 Запросы', callback_data='edit_request_channel')
+).add(
     InlineKeyboardButton(text='📩 Отчетность', callback_data='edit_report_channel')
+).add(
+    InlineKeyboardButton(text='✅ Цели', callback_data='edit_goals_channel')
 ).add(
     InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
 )

@@ -62,6 +62,7 @@ class EditReport(StatesGroup):
 
 
 class Channel(StatesGroup):
+    listening_goals_channel = State()
     listening_request_channel = State()
     listening_report_channel = State()
     choose = State()
@@ -72,3 +73,11 @@ class Points(StatesGroup):
     add_amount = State()
     reduce = State()
     reduce_amount = State()
+
+
+class Goals(StatesGroup):
+    comment = State()
+    media = State()
+    days = State()
+    check_amount = State()
+    notion_link = State()

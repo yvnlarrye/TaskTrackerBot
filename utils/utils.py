@@ -106,9 +106,32 @@ async def delete_prev_message(chat_id, state: FSMContext):
 
 def get_status_icon(status: str):
     match status:
-        case 'Silver': return STATUS['silver']['icon']
-        case 'Gold': return STATUS['gold']['icon']
-        case 'Diamond': return STATUS['diamond']['icon']
-        case 'Black': return STATUS['black']['icon']
-        case _: return STATUS['white']['icon']
+        case 'Silver':
+            return STATUS['silver']['icon']
+        case 'Gold':
+            return STATUS['gold']['icon']
+        case 'Diamond':
+            return STATUS['diamond']['icon']
+        case 'Black':
+            return STATUS['black']['icon']
+        case _:
+            return STATUS['white']['icon']
+
+
+def requestContainsUser(request: tuple, user: tuple) -> bool:
+    username = user[3]
+
+    addressers = request[3].split('\n')
+    if username in addressers:
+        return True
+
+    main_recipient = request[4]
+    if username == main_recipient:
+        return True
+
+    secondary_recipients = request[5].split('\n')
+    if username in secondary_recipients:
+        return True
+
+    return False
 

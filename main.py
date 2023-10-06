@@ -4,7 +4,6 @@ from handlers import general, member, admin
 from data import sqlite_db
 import aioschedule
 import asyncio
-# from handlers.general import update_report_tracker, check_report_tracker
 
 
 async def on_startup(_):
@@ -15,9 +14,6 @@ async def on_startup(_):
 
 
 async def scheduler():
-    # aioschedule.every().day.at("19:59").do(update_report_tracker)
-    # aioschedule.every().day.at("22:01").do(check_report_tracker)
-    # aioschedule.every().week.do(reset_raring)
     while True:
         await aioschedule.run_pending()
         await asyncio.sleep(1)
