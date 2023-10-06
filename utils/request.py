@@ -187,19 +187,37 @@ async def update_request_message(request_id):
     curr_request = await sqlite_db.get_request_by_id(request_id)
     req_status = request_status_str(curr_request[2])
     addressers = curr_request[3].split('\n')
-    main_recipient = curr_request[4]
+    main_recipient = curr_request[4].strip()
     secondary_recipients = curr_request[5]
     if secondary_recipients == '':
         secondary_recipients = []
     else:
         secondary_recipients = curr_request[5].split('\n')
+
+    addressers_transfer_data = []
+    for username in addressers:
+        addresser = await sqlite_db.get_user_by_username(username.strip())
+        addressers_transfer_data.append(
+            (addresser[3], addresser[4], addresser[5], addresser[7],)
+        )
+
+    main_recipient = await sqlite_db.get_user_by_username(main_recipient)
+    main_recipient_transfer_data = (main_recipient[3], main_recipient[4], main_recipient[5], main_recipient[7],)
+
+    secondary_recipients_transfer_data = []
+    for username in secondary_recipients:
+        secondary_recipient = await sqlite_db.get_user_by_username(username.strip())
+        secondary_recipients_transfer_data.append(
+            (secondary_recipient[3], secondary_recipient[4], secondary_recipient[5], secondary_recipient[7],)
+        )
+
     text = curr_request[6]
     date_time = str(curr_request[7]).split()
     date = date_time[0]
     time = date_time[1]
     message_id = curr_request[8]
-    new_output = print_request(request_id, req_status, addressers, main_recipient,
-                               secondary_recipients, text, date, time)
+    new_output = print_request(request_id, req_status, addressers_transfer_data, main_recipient_transfer_data,
+                               secondary_recipients_transfer_data, text, date, time)
     try:
         await bot.edit_message_text(text=new_output, chat_id=CONFIG['request_channel'], message_id=message_id)
     except MessageNotModified:

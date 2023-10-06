@@ -37,8 +37,10 @@ async def member_start(msg: Message, state: FSMContext):
                                                       CreateRequest.time, CreateRequest.date,
                                                       CreateReport.earned,
                                                       EditRequest.date, EditRequest.text,
-                                                      EditRequest.status])
+                                                      EditRequest.status,
+                                                      EditReport.earned])
 async def back_to_member_menu(msg: Message, state: FSMContext):
+    await delete_prev_message(msg.from_id, state)
     await member_start(msg, state)
 
 
@@ -51,6 +53,11 @@ async def back_to_member_menu(msg: Message, state: FSMContext):
                                                     CreateReport.list_of_done_tasks,
                                                     CreateReport.list_of_not_done_tasks,
                                                     CreateReport.list_of_scheduled_tasks,
+                                                    EditReport.list_of_done_tasks,
+                                                    EditReport.list_of_not_done_tasks,
+                                                    EditReport.list_of_scheduled_tasks,
+                                                    EditReport.select_report_headers,
+                                                    EditReport.select_member_report
                                                     ])
 async def back_to_member_menu_kb(cb: CallbackQuery, state: FSMContext):
     await cb.message.delete()
@@ -263,11 +270,11 @@ async def edit_request_status(cb: CallbackQuery, state: FSMContext):
         return
 
     secondary_recipients = curr_request[5]
-    main_recipient_id = (await sqlite_db.get_member_by_username(curr_request[4]))[0]
+    main_recipient_id = (await sqlite_db.get_user_by_username(curr_request[4]))[0]
     secondary_recipients_ids = []
     if secondary_recipients != '':
         secondary_recipients_ids = [
-            (await sqlite_db.get_member_by_username(username))[0]
+            (await sqlite_db.get_user_by_username(username))[0]
             for username in secondary_recipients.split('\n')
         ]
     main_recipient_rate = await sqlite_db.get_user_points(main_recipient_id)
@@ -364,9 +371,10 @@ async def edit_time(msg: Message, state: FSMContext):
 @dp.message_handler(text='📩 Отчетность', state=SessionRole.member)
 async def reporting(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
-    await msg.answer('Сколько заработали 💰₽ за сегодняшний день?\n'
-                     'Введите значение в следующем формате: 150000',
-                     reply_markup=kb.prev_step_reply_kb)
+    m = await msg.answer('Сколько заработали 💰₽ за сегодняшний день?\n'
+                         'Введите значение в следующем формате: 150000',
+                         reply_markup=kb.prev_step_reply_kb)
+    await state.update_data(msg=m)
     await CreateReport.earned.set()
 
 
@@ -374,6 +382,7 @@ async def reporting(msg: Message, state: FSMContext):
 async def add_phone_time(msg: Message, state: FSMContext):
     try:
         result = int(msg.text)
+        await delete_prev_message(msg.from_id, state)
         message = await msg.answer('✅ Введите список выполненных сегодня задач (по одной):',
                                    reply_markup=apply_tasks_kb())
         await state.update_data(earned=result, user_id=msg.from_id, msg_id=message.message_id,
@@ -456,19 +465,19 @@ async def apply_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
 
     author_id = await sqlite_db.get_user_id(cb.from_user.id)
     report_id = (await sqlite_db.get_user_last_report_id(author_id))[0]
-    member = await sqlite_db.get_user_by_id(author_id)
-    surname = member[5]
-    first_name = member[4]
-    user_name = member[3]
+    user = await sqlite_db.get_user_by_id(author_id)
+    surname = user[5]
+    first_name = user[4]
+    user_name = user[3]
+    user_status = user[7]
     earned = data['earned']
     done_tasks = data['done_tasks_list']
     not_done_tasks = data['not_done_tasks_list']
     scheduled_tasks = data['scheduled_tasks_list']
 
+    user = (user_name, first_name, surname, user_status,)
     output = await print_report(report_id=report_id,
-                                surname=surname,
-                                first_name=first_name,
-                                username=user_name,
+                                user=user,
                                 earned=earned,
                                 done_tasks=done_tasks,
                                 not_done_tasks=not_done_tasks,
@@ -483,13 +492,13 @@ async def apply_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
 
 
 @dp.message_handler(text='✏️ Ред. отчётность', state=SessionRole.member)
-async def edit_member_report(msg: Message, state: FSMContext):
+async def edit_user_report(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     user_id = await sqlite_db.get_user_id(msg.from_id)
     await state.update_data(role_state=(await state.get_state()).split(':')[1])
     reports = await sqlite_db.get_user_reports(user_id)
     if len(reports):
-        await state.update_data(user_id=user_id)
+        await state.update_data(user_id=user_id, reps=reports)
         await msg.answer('Выберите отчёт для редактирования:',
                          reply_markup=(await kb.member_reports_kb(reports)))
         await EditReport.select_member_report.set()
@@ -500,8 +509,9 @@ async def edit_member_report(msg: Message, state: FSMContext):
 
 @dp.callback_query_handler(Text(startswith='elm_'), state=EditReport.select_member_report)
 async def select_member_report(cb: CallbackQuery, state: FSMContext):
+    await cb.message.delete()
     rep_index = int(cb.data[4:])
-    await state.update_data(rep_index=rep_index)
+    await state.update_data(rep=(await state.get_data())['reps'][rep_index])
     await cb.message.answer('Выберите поле отчёта, которое хотите отредактировать:',
                             reply_markup=(await kb.report_headers_kb()))
     await EditReport.select_report_headers.set()
@@ -513,9 +523,11 @@ async def select_report_headers(cb: CallbackQuery, state: FSMContext):
     await cb.message.delete()
     match header_index:
         case 0:
-            await cb.message.answer('Введите количество времени, проведенное в телефоне за день.\n'
-                                    'Например: 00:25 или 01:19')
-            await EditReport.phone_time.set()
+            m = await cb.message.answer('Сколько заработали 💰₽ за сегодняшний день?\n'
+                                        'Введите значение в следующем формате: 150000',
+                                        reply_markup=kb.prev_step_reply_kb)
+            await state.update_data(msg=m)
+            await EditReport.earned.set()
         case 1:
             message = await cb.message.answer('✅ Введите список выполненных сегодня задач (по одной):',
                                               reply_markup=apply_tasks_kb())
@@ -533,26 +545,24 @@ async def select_report_headers(cb: CallbackQuery, state: FSMContext):
             await EditReport.list_of_scheduled_tasks.set()
 
 
-@dp.message_handler(state=EditReport.phone_time)
+@dp.message_handler(state=EditReport.earned)
 async def edit_phone_time(msg: Message, state: FSMContext):
     try:
-        phone_time = parse_time(msg.text)
-        await validate_time(phone_time)
-
+        result = int(msg.text)
+        await delete_prev_message(msg.from_id, state)
         data = await state.get_data()
-        reports = await sqlite_db.get_user_reports(data['user_id'])
-        report_id = reports[data['rep_index']][0]
-        await sqlite_db.update_report_phone_time(report_id, phone_time)
+        report = data['rep']
+        report_id = report[0]
+        await sqlite_db.update_report_earned(report_id, result)
 
         await update_report_data(report_id)
 
-        await msg.answer('Активность в телефоне успешно изменена')
-        await refresh_role(state)
+        await msg.answer('<b>Заработанная сумма</b> успешно изменена',
+                         reply_markup=kb.member_menu_kb)
+        await SessionRole.member.set()
 
-    except AttributeError:
-        await msg.answer(text='Неверный формат времени')
-        await msg.answer(f'Введите время:\n'
-                         f'Например: {datetime.now().strftime("%H:%M")}')
+    except ValueError:
+        await msg.answer('Неверный формат ввода. Попробуйте еще раз.')
 
 
 @dp.message_handler(state=EditReport.list_of_done_tasks)
@@ -571,16 +581,17 @@ async def edit_list_of_done_tasks(msg: Message, state: FSMContext):
 
 @dp.callback_query_handler(text='apply_tasks', state=EditReport.list_of_done_tasks)
 async def apply_edition_done_tasks(cb: CallbackQuery, state: FSMContext):
+    await cb.message.delete()
     data = await state.get_data()
     done_tasks = '\n'.join(data['done_tasks_list'])
-    reports = await sqlite_db.get_user_reports(data['user_id'])
-    report_id = reports[data['rep_index']][0]
+    report_id = data['rep'][0]
     await sqlite_db.update_report_done_tasks(report_id, done_tasks)
 
     await update_report_data(report_id)
 
-    await cb.message.answer('Выполненные задания успешно изменены')
-    await refresh_role(state)
+    await cb.message.answer('Выполненные задания успешно изменены',
+                            reply_markup=kb.member_menu_kb)
+    await SessionRole.member.set()
 
 
 @dp.message_handler(state=EditReport.list_of_not_done_tasks)
@@ -599,16 +610,17 @@ async def edit_list_of_not_done_tasks(msg: Message, state: FSMContext):
 
 @dp.callback_query_handler(text='apply_tasks', state=EditReport.list_of_not_done_tasks)
 async def apply_edition_not_done_tasks(cb: CallbackQuery, state: FSMContext):
+    await cb.message.delete()
     data = await state.get_data()
     not_done_tasks = '\n'.join(data['not_done_tasks_list'])
-    reports = await sqlite_db.get_user_reports(data['user_id'])
-    report_id = reports[data['rep_index']][0]
+    report_id = data['rep'][0]
     await sqlite_db.update_report_not_done_tasks(report_id, not_done_tasks)
 
     await update_report_data(report_id)
 
-    await cb.message.answer('Не выполненные задания успешно изменены')
-    await refresh_role(state)
+    await cb.message.answer('<b>Не выполненные задания</b> успешно изменены',
+                            reply_markup=kb.member_menu_kb)
+    await SessionRole.member.set()
 
 
 @dp.message_handler(state=EditReport.list_of_scheduled_tasks)
@@ -627,13 +639,14 @@ async def edit_list_of_scheduled_tasks(msg: Message, state: FSMContext):
 
 @dp.callback_query_handler(text='apply_tasks', state=EditReport.list_of_scheduled_tasks)
 async def apply_edition_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
+    await cb.message.delete()
     data = await state.get_data()
     scheduled_tasks = '\n'.join(data['scheduled_tasks_list'])
-    reports = await sqlite_db.get_user_reports(data['user_id'])
-    report_id = reports[data['rep_index']][0]
+    report_id = data['rep'][0]
     await sqlite_db.update_report_scheduled_tasks(report_id, scheduled_tasks)
 
     await update_report_data(report_id)
 
-    await cb.message.answer('Запланированные задания успешно изменены')
-    await refresh_role(state)
+    await cb.message.answer('<b>Запланированные задания</b> успешно изменены',
+                            reply_markup=kb.member_menu_kb)
+    await SessionRole.member.set()

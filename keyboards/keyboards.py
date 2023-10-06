@@ -3,9 +3,9 @@ from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton
 )
 
-from data import sqlite_db
 from utils.utils import formatted_users_list, __toggle_btn, __toggle_main_recipients_btn
 from utils.request import request_status_str
+from data.config import STATUS
 
 intro_admin_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     KeyboardButton('👨‍💻 Участник'),
@@ -34,14 +34,19 @@ admin_menu_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     KeyboardButton('✅ Добавить участника'),
     KeyboardButton('✅ Добавить админа')
 ).add(
-    KeyboardButton('📊 Начислить баллы'),
-    KeyboardButton('🚫 Отнять баллы')
+    KeyboardButton('📊 Баллы'),
+    KeyboardButton('👑 Изменить статус')
 ).add(
     KeyboardButton('⛔👨‍💻 Удалить участника'),
     KeyboardButton('⛔📝 Удалить запрос')
 ).add(
     KeyboardButton('🏠Выйти'),
     KeyboardButton('↪️Каналы')
+)
+
+points_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
+    KeyboardButton('📊 Начислить баллы'),
+    KeyboardButton('🚫 Отнять баллы')
 )
 
 channels_kb = InlineKeyboardMarkup().add(
@@ -81,6 +86,18 @@ async def remove_member_kb(curr_users: list, member_index=None):
             formatted_users[i] = formatted_users[i] + '🔴'
         buttons_list.append([InlineKeyboardButton(text=formatted_users[i], callback_data=f'rm_user_{i}')])
     buttons_list.append([InlineKeyboardButton(text='❌ Удалить участника', callback_data='approve_remove')])
+    buttons_list.append([InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')])
+    return InlineKeyboardMarkup(inline_keyboard=buttons_list)
+
+
+async def select_member_to_edit_status_kb(curr_users: list, member_index=None):
+    buttons_list = []
+    formatted_users = formatted_users_list(curr_users)
+    for i in range(len(formatted_users)):
+        if i == member_index:
+            formatted_users[i] = formatted_users[i] + '🔴'
+        buttons_list.append([InlineKeyboardButton(text=formatted_users[i], callback_data=f'user_{i}')])
+    buttons_list.append([InlineKeyboardButton(text='Далее ⏩', callback_data='next_step')])
     buttons_list.append([InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')])
     return InlineKeyboardMarkup(inline_keyboard=buttons_list)
 
@@ -149,14 +166,6 @@ def __list_of_elements_kb(elements: list):
     return InlineKeyboardMarkup(inline_keyboard=buttons_list)
 
 
-async def members_list_kb():
-    members = await sqlite_db.get_users()
-    formatted_members = formatted_users_list(members)
-    return __list_of_elements_kb(formatted_members).add(
-        InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
-    )
-
-
 async def users_requests_kb(requests: list):
     requests_ids = [f'Запрос #{req[0]} {request_status_str(req[2])[0]}' for req in requests]
     return __list_of_elements_kb(requests_ids).add(
@@ -178,6 +187,13 @@ async def request_status_kb():
     )
 
 
+async def user_status_kb():
+    statuses = [f"{STATUS[key]['icon']} - {STATUS[key]['value']}" for key in STATUS.keys()]
+    return __list_of_elements_kb(statuses).add(
+        InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
+    )
+
+
 def apply_tasks_kb():
     keyboard = InlineKeyboardMarkup().add(
         InlineKeyboardButton(text='Подтвердить', callback_data='apply_tasks'),
@@ -188,15 +204,17 @@ def apply_tasks_kb():
 
 async def member_reports_kb(reports: list):
     reports_ids = [f'Отчёт #{req[0]}' for req in reports]
-    return __list_of_elements_kb(reports_ids)
+    return __list_of_elements_kb(reports_ids).add(
+        InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
+    )
 
 
 async def report_headers_kb():
     headers = [
-        'Активность в телефоне',
-        'Выполненные задачи',
-        'Невыполненные задачи',
-        'Запланированные задачи'
+        'Заработано 💰',
+        'Выполненные задачи ✅',
+        'Невыполненные задачи ❌',
+        'Запланированные задачи 📝'
     ]
     return __list_of_elements_kb(headers).add(
         InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')

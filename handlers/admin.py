@@ -10,7 +10,7 @@ from keyboards import keyboards as kb
 from utils.utils import is_admin
 from data import sqlite_db
 from states import SessionRole, UserEdition, Channel, Points, EditRequest
-from data.config import CONFIG
+from data.config import CONFIG, STATUS
 from utils.utils import delete_prev_message
 
 
@@ -36,7 +36,8 @@ async def back_to_admin_menu(msg: Message, state: FSMContext):
                                                     Channel.listening_request_channel,
                                                     Channel.listening_report_channel,
                                                     EditRequest.remove,
-                                                    UserEdition.remove_member])
+                                                    UserEdition.remove_member,
+                                                    UserEdition.edit_status])
 async def back_to_admin_menu_cb(cb: CallbackQuery, state: FSMContext):
     await cb.message.delete()
     await admin_start(cb.message, state)
@@ -194,6 +195,13 @@ async def upd_selected_users(cb: CallbackQuery, state: FSMContext, text: str):
                                 message_id=cb.message.message_id,
                                 text=text,
                                 reply_markup=new_keyboard)
+
+
+@dp.message_handler(text='📊 Баллы', state=SessionRole.admin)
+async def points(msg: Message, state: FSMContext):
+    await delete_prev_message(msg.from_id, state)
+    m = await msg.answer('Выберите действие:', reply_markup=kb.points_kb)
+    await state.update_data(msg=m)
 
 
 @dp.message_handler(text='📊 Начислить баллы', state=SessionRole.admin)
@@ -390,3 +398,49 @@ async def cancel_removing_request(cb: CallbackQuery, state: FSMContext):
                             reply_markup=kb.admin_menu_kb)
     await state.reset_data()
     await SessionRole.admin.set()
+
+
+@dp.message_handler(text='👑 Изменить статус', state=SessionRole.admin)
+async def change_status(msg: Message, state: FSMContext):
+    await delete_prev_message(msg.from_id, state)
+    users = await sqlite_db.get_users()
+    await msg.answer(text='<b>Выберите участника, у которого хотите изменить статус:</b>\n\n',
+                     reply_markup=(await kb.select_member_to_edit_status_kb(users)))
+    await state.update_data(curr_users=users)
+    await UserEdition.edit_status.set()
+
+
+@dp.callback_query_handler(Text(startswith='user_'), state=UserEdition.edit_status)
+async def change_user_status_pick(cb: CallbackQuery, state: FSMContext):
+    user_index = int(cb.data[5:])
+    data = await state.get_data()
+    curr_users = data['curr_users']
+    new_keyboard = await kb.select_member_to_edit_status_kb(curr_users, user_index)
+    await state.update_data(user_index=user_index)
+    await bot.edit_message_text(chat_id=cb.message.chat.id,
+                                message_id=cb.message.message_id,
+                                text=cb.message.text,
+                                reply_markup=new_keyboard)
+
+
+@dp.callback_query_handler(text='next_step', state=UserEdition.edit_status)
+async def choose_status(cb: CallbackQuery):
+    await cb.message.delete()
+    await cb.message.answer('Выберите новый статус:',
+                            reply_markup=(await kb.user_status_kb()))
+
+
+@dp.callback_query_handler(Text(startswith='elm_'), state=UserEdition.edit_status)
+async def finish_user_status_edition(cb: CallbackQuery, state: FSMContext):
+    status_index = int(cb.data[4:])
+    await cb.message.delete()
+    data = await state.get_data()
+    users = data['curr_users']
+    user = users[data['user_index']]
+    user_id = user[0]
+    new_status = STATUS[STATUS.keys()[status_index]]['value']
+    await sqlite_db.update_user_status(user_id, new_status)
+    await cb.message.answer(f'Статус пользователя @{user[3]} успешно обновлён.',
+                            reply_markup=kb.admin_menu_kb)
+    await SessionRole.admin.set()
+

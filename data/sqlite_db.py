@@ -266,9 +266,16 @@ async def get_user_reports(author_id: int):
     return result.fetchall()
 
 
-async def update_report_phone_time(report_id: int, phone_time: str):
+async def update_user_status(user_id: int, status: str):
     cur.execute(
-        "UPDATE reports SET phone_time = ? WHERE id = ?", (phone_time, report_id,)
+        "UPDATE users SET status = ? WHERE id = ?", (status, user_id,)
+    )
+    db.commit()
+
+
+async def update_report_earned(report_id: int, earned: int):
+    cur.execute(
+        "UPDATE reports SET earned = ? WHERE id = ?", (earned, report_id,)
     )
     db.commit()
 
@@ -321,7 +328,7 @@ async def update_user_points(user_id: int, points: int):
     db.commit()
 
 
-async def get_member_by_username(username: str):
+async def get_user_by_username(username: str):
     result = cur.execute(
         "SELECT * FROM users WHERE username = ?", (username,)
     )

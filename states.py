@@ -8,6 +8,7 @@ class SessionRole(StatesGroup):
 
 
 class UserEdition(StatesGroup):
+    edit_status = State()
     new_admin_name = State()
     admin = State()
     admin_name = State()
@@ -55,9 +56,8 @@ class EditReport(StatesGroup):
     list_of_scheduled_tasks = State()
     list_of_not_done_tasks = State()
     list_of_done_tasks = State()
-    phone_time = State()
+    earned = State()
     select_report_headers = State()
-    edit_by_admin = State()
     select_member_report = State()
 
 
