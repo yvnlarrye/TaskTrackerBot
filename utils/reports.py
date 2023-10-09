@@ -1,5 +1,4 @@
 import datetime
-import json
 from data import sqlite_db
 from data.config import CONFIG
 from dispatcher import bot
@@ -55,33 +54,4 @@ async def update_report_message(report_id: int):
                                     not_done_tasks=not_done_tasks,
                                     scheduled_tasks=scheduled_tasks)
 
-    await bot.edit_message_text(text=new_output, chat_id=CONFIG['report_channel'], message_id=message_id)
-
-
-async def update_report_tracker():
-    reports_count_data = {}
-    members = await sqlite_db.get_users()
-    for member in members:
-        user_id = member[0]
-        reports_count = await sqlite_db.count_user_reports(user_id)
-        reports_count[f'{user_id}'] = reports_count
-    with open('../data/rating_data.json', 'w', encoding='utf-8') as json_file:
-        json.dump(reports_count_data, json_file, ensure_ascii=False, indent=4)
-
-# async def check_report_tracker():
-#     old_reports_count_data = get_json_file_contents('data/rating_data.json')
-#     reports_count_data = {}
-#     members = await sqlite_db.get_users()
-#     for member in members:
-#         user_id = member[0]
-#         reports_count = await sqlite_db.count_user_reports(user_id)
-#         reports_count[f'{user_id}'] = reports_count_data
-#     for key, value in old_reports_count_data:
-#         if key in reports_count_data and key in old_reports_count_data:
-#             user_id = int(key)
-#             user_rate = await sqlite_db.get_user_points(user_id)
-#             if value > old_reports_count_data[key]:
-#                 user_rate += 1
-#             else:
-#                 user_rate -= 1
-#             await sqlite_db.update_user_points(user_id, user_rate)
+    await bot.edit_message_text(text=new_output, chat_id=CONFIG['channels']['report_channel'], message_id=message_id)

@@ -1,4 +1,5 @@
 import asyncio
+import re
 
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
@@ -12,8 +13,7 @@ from keyboards import keyboards as kb
 from keyboards.keyboards import apply_tasks_kb
 from utils.reports import print_report, update_report_message
 from utils.request import (
-    request_to_user, request_from_user, commit_request, request_date,
-    print_request, update_request_message, request_time
+    request_to_user, request_from_user, commit_request, print_request, update_request_message
 )
 from utils.utils import (
     format_recipients, format_addressers, commit_report, delete_prev_message, get_status_icon
@@ -21,7 +21,7 @@ from utils.utils import (
 from states import SessionRole, CreateRequest, CreateReport, UserEdition, EditRequest, EditReport, Goals
 from datetime import datetime
 
-from utils.validators import parse_time, validate_time
+from utils.validators import validate_date
 from data import sqlite_db
 from data.config import REQUEST_STATUS, CONFIG
 
@@ -41,7 +41,7 @@ async def member_start(msg: Message, state: FSMContext):
                                                       EditRequest.status, EditReport.earned,
                                                       Goals.days, Goals.media, Goals.check_amount,
                                                       Goals.notion_link, Goals.comment])
-async def back_to_member_menu(msg: Message, state: FSMContext):
+async def back_to_member_menu_kb(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     await member_start(msg, state)
 
@@ -61,10 +61,14 @@ async def back_to_member_menu(msg: Message, state: FSMContext):
                                                     EditReport.select_report_headers,
                                                     EditReport.select_member_report
                                                     ])
-async def back_to_member_menu_kb(cb: CallbackQuery, state: FSMContext):
+async def back_to_member_menu_cb(cb: CallbackQuery, state: FSMContext):
     await cb.message.delete()
-    await delete_prev_message(cb.from_user.id, state)
     await member_start(cb.message, state)
+
+
+async def member_reset(state: FSMContext):
+    await state.reset_data()
+    await SessionRole.member.set()
 
 
 @dp.message_handler(state=UserEdition.new_admin_name)
@@ -136,17 +140,10 @@ async def listening_request_text(msg: Message, state: FSMContext):
 
 @dp.message_handler(state=CreateRequest.date)
 async def listening_request_date(msg: Message, state: FSMContext):
-    await request_date(msg, state, CreateRequest.time)
-
-
-@dp.message_handler(state=CreateRequest.time)
-async def listening_request_time(msg: Message, state: FSMContext):
     try:
-        result = parse_time(msg.text)
-        await validate_time(result)
-        await state.update_data(time=result)
-        await state.update_data(author_telegram_id=msg.from_id)
-
+        date = re.sub(r"[/\\-]", ".", re.search(r"(\d+.*?\d+.*?\d+)", msg.text).group(1))
+        await validate_date(date, msg)
+        await state.update_data(date=date)
         await msg.answer('Для завершения операции нажмите кнопку "Подтвердить"',
                          reply_markup=InlineKeyboardMarkup().add(
                              InlineKeyboardButton(text='✅ Подтвердить', callback_data='confirm_request')
@@ -155,17 +152,21 @@ async def listening_request_time(msg: Message, state: FSMContext):
                          )
                          )
     except AttributeError:
-        await msg.answer(text='Неверный формат времени')
-        await msg.answer(f'Введите время:\n'
-                         f'Например: {datetime.now().strftime("%H:%M")}')
+        await msg.answer(text='Неверный формат даты',
+                         reply_markup=kb.prev_step_reply_kb)
+        await msg.answer(f'Введите дату срока запроса в формате:\n'
+                         f'DD.MM.YY\n'
+                         f'Например: {datetime.now().strftime("%d.%m.%y")}')
 
 
-@dp.callback_query_handler(text='confirm_request', state=CreateRequest.time)
+@dp.callback_query_handler(text='confirm_request', state=CreateRequest.date)
 async def confirm_creating_request(cb: CallbackQuery, state: FSMContext):
+    await state.update_data(author_telegram_id=cb.from_user.id)
     data = await state.get_data()
     await commit_request(data)
-    author_id = await sqlite_db.get_user_id(data['author_telegram_id'])
+    author_id = await sqlite_db.get_user_id(cb.from_user.id)
     request_id = (await sqlite_db.get_user_last_request_id(author_id))[0]
+    data = await state.get_data()
     users = data['curr_users']
     addressers = [
         (users[user_index][3], users[user_index][4], users[user_index][5], users[user_index][7],)
@@ -173,27 +174,28 @@ async def confirm_creating_request(cb: CallbackQuery, state: FSMContext):
     ]
     main_recipient = users[data['main_recipient']]
     main_recipient = (main_recipient[3], main_recipient[4], main_recipient[5], main_recipient[7],)
-    secondary_recipients = [
-        (users[user_index][3], users[user_index][4], users[user_index][5], users[user_index][7],)
-        for user_index in data['secondary_recipients']
-    ]
+    if 'secondary_recipient' in data:
+        secondary_recipient = users[data['secondary_recipient']]
+        secondary_recipient = (
+            secondary_recipient[3], secondary_recipient[4], secondary_recipient[5], secondary_recipient[7],
+        )
+    else:
+        secondary_recipient = ()
     output = print_request(request_id=request_id,
                            status=REQUEST_STATUS['in_progress'],
                            addressers=addressers,
                            main_recipient=main_recipient,
-                           secondary_recipients=secondary_recipients,
+                           secondary_recipient=secondary_recipient,
                            text=data['text'],
-                           date=data['date'],
-                           time=data['time'])
+                           date=data['date'])
     await cb.message.answer(output,
                             reply_markup=kb.member_menu_kb)
     await cb.message.delete()
-    msg = await bot.send_message(chat_id=CONFIG['request_channel'],
+    msg = await bot.send_message(chat_id=CONFIG['channels']['request_channel'],
                                  text=output)
     await sqlite_db.add_message_id_to_request(request_id, msg.message_id)
 
-    await state.finish()
-    await SessionRole.member.set()
+    await member_reset(state)
 
 
 @dp.message_handler(text='✏️ Ред. запрос', state=SessionRole.member)
@@ -271,35 +273,31 @@ async def edit_request_status(cb: CallbackQuery, state: FSMContext):
                                 reply_markup=kb.prev_step_reply_kb)
         return
 
-    secondary_recipients = curr_request[5]
-    main_recipient_id = (await sqlite_db.get_user_by_username(curr_request[4]))[0]
-    secondary_recipients_ids = []
-    if secondary_recipients != '':
-        secondary_recipients_ids = [
-            (await sqlite_db.get_user_by_username(username))[0]
-            for username in secondary_recipients.split('\n')
-        ]
-    main_recipient_rate = await sqlite_db.get_user_points(main_recipient_id)
-
     sign = None
     if status != 2 and request_status == 2:
         sign = -1
     if status == 2 and request_status != 2:
         sign = 1
+
     if sign is not None:
+        main_recipient_id = (await sqlite_db.get_user_by_username(curr_request[4]))[0]
+        main_recipient_rate = await sqlite_db.get_user_points(main_recipient_id)
         main_recipient_rate += 1 * sign
         await sqlite_db.update_user_points(main_recipient_id, main_recipient_rate)
-        for recipient_id in secondary_recipients_ids:
-            recipient_rate = await sqlite_db.get_user_points(recipient_id)
+
+        secondary_recipient = curr_request[5]
+        if secondary_recipient != '':
+            secondary_recipient_id = (await sqlite_db.get_user_by_username(curr_request[5]))[0]
+            recipient_rate = await sqlite_db.get_user_points(secondary_recipient_id)
             recipient_rate += 0.5 * sign
-            await sqlite_db.update_user_points(recipient_id, recipient_rate)
+            await sqlite_db.update_user_points(secondary_recipient_id, recipient_rate)
 
     await sqlite_db.update_request_status(request_id, status)
     await update_request_message(request_id)
 
     await cb.message.answer('Статус запроса успешно обновлён',
                             reply_markup=kb.member_menu_kb)
-    await SessionRole.member.set()
+    await member_reset(state)
 
 
 @dp.callback_query_handler(Text(startswith='user_'), state=EditRequest.addressers)
@@ -320,7 +318,7 @@ async def confirm_edit_addressers(cb: CallbackQuery, state: FSMContext):
     await cb.message.answer('Отправители запроса успешно изменены',
                             reply_markup=kb.member_menu_kb)
     await cb.message.delete()
-    await SessionRole.member.set()
+    await member_reset(state)
 
 
 @dp.callback_query_handler(Text(startswith='user_'), state=EditRequest.recipients)
@@ -337,13 +335,16 @@ async def confirm_edit_recipients(cb: CallbackQuery, state: FSMContext):
         users = data['curr_users']
         request_id = data['req'][0]
         main_recipient = users[data['main_recipient']][3]
-        secondary_recipients = '\n'.join([users[user_index][3] for user_index in data['secondary_recipients']])
-        await sqlite_db.update_request_recipients(request_id, main_recipient, secondary_recipients)
+        if 'secondary_recipient' in data:
+            secondary_recipient = users[data['secondary_recipient']][3]
+        else:
+            secondary_recipient = ''
+        await sqlite_db.update_request_recipients(request_id, main_recipient, secondary_recipient)
         await update_request_message(request_id)
         await cb.message.answer('Получатели успешно изменены.',
                                 reply_markup=kb.member_menu_kb)
         await cb.message.delete()
-        await SessionRole.member.set()
+        await member_reset(state)
 
 
 @dp.message_handler(state=EditRequest.text)
@@ -357,17 +358,29 @@ async def edit_text(msg: Message, state: FSMContext):
 
     await msg.answer('Текст запроса успешно изменен',
                      reply_markup=kb.member_menu_kb)
-    await SessionRole.member.set()
+    await member_reset(state)
 
 
 @dp.message_handler(state=EditRequest.date)
 async def edit_date(msg: Message, state: FSMContext):
-    await request_date(msg, state, EditRequest.time)
+    try:
+        date = re.sub(r"[/\\-]", ".", re.search(r"(\d+.*?\d+.*?\d+)", msg.text).group(1))
+        await validate_date(date, msg)
+        data = await state.get_data()
+        request_id = data['req'][0]
+        await sqlite_db.update_request_date(request_id, date)
+        await update_request_message(request_id)
 
-
-@dp.message_handler(state=EditRequest.time)
-async def edit_time(msg: Message, state: FSMContext):
-    await request_time(msg, state)
+        await msg.answer('Срок успешно изменен.',
+                         reply_markup=kb.member_menu_kb)
+        await member_reset(state)
+    except AttributeError:
+        date = datetime.now().strftime('%d.%m.%y')
+        await msg.answer(text='Неверный формат даты',
+                         reply_markup=kb.prev_step_reply_kb)
+        await msg.answer(f'Введите дату срока запроса в формате:\n'
+                         f'DD.MM.YY\n'
+                         f'Например: {date}')
 
 
 @dp.message_handler(text='📩 Отчетность', state=SessionRole.member)
@@ -485,12 +498,11 @@ async def apply_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
                                 not_done_tasks=not_done_tasks,
                                 scheduled_tasks=scheduled_tasks)
 
-    await cb.message.answer(output)
-    msg = await bot.send_message(chat_id=CONFIG['report_channel'],
+    await cb.message.answer(output, reply_markup=kb.member_menu_kb)
+    msg = await bot.send_message(chat_id=CONFIG['channels']['report_channel'],
                                  text=output)
     await sqlite_db.add_message_id_to_report(report_id, msg.message_id)
-    await state.finish()
-    await SessionRole.member.set()
+    await member_reset(state)
 
 
 @dp.message_handler(text='✏️ Ред. отчётность', state=SessionRole.member)
@@ -561,7 +573,7 @@ async def edit_phone_time(msg: Message, state: FSMContext):
 
         await msg.answer('<b>Заработанная сумма</b> успешно изменена',
                          reply_markup=kb.member_menu_kb)
-        await SessionRole.member.set()
+        await member_reset(state)
 
     except ValueError:
         await msg.answer('Неверный формат ввода. Попробуйте еще раз.')
@@ -593,7 +605,7 @@ async def apply_edition_done_tasks(cb: CallbackQuery, state: FSMContext):
 
     await cb.message.answer('Выполненные задания успешно изменены',
                             reply_markup=kb.member_menu_kb)
-    await SessionRole.member.set()
+    await member_reset(state)
 
 
 @dp.message_handler(state=EditReport.list_of_not_done_tasks)
@@ -622,7 +634,7 @@ async def apply_edition_not_done_tasks(cb: CallbackQuery, state: FSMContext):
 
     await cb.message.answer('<b>Не выполненные задания</b> успешно изменены',
                             reply_markup=kb.member_menu_kb)
-    await SessionRole.member.set()
+    await member_reset(state)
 
 
 @dp.message_handler(state=EditReport.list_of_scheduled_tasks)
@@ -651,7 +663,7 @@ async def apply_edition_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
 
     await cb.message.answer('<b>Запланированные задания</b> успешно изменены',
                             reply_markup=kb.member_menu_kb)
-    await SessionRole.member.set()
+    await member_reset(state)
 
 
 @dp.message_handler(text='✅ Закрытые цели', state=SessionRole.member)
@@ -684,37 +696,9 @@ async def listening_check_amount(msg: Message, state: FSMContext):
     try:
         check_amount = int(msg.text)
         await delete_prev_message(msg.from_id, state)
-        m = await msg.answer('📆 За какое кол-во дней закрыли цель?',
+        m = await msg.answer('📷 Прикрепите видео или фото, относящееся к цели:',
                              reply_markup=kb.prev_step_reply_kb)
         await state.update_data(msg=m, check_amount=check_amount)
-        await Goals.days.set()
-    except ValueError:
-        await msg.answer('Неверный формат ввода. Попробуйте еще раз.',
-                         reply_markup=kb.prev_step_reply_kb)
-
-
-@dp.message_handler(state=Goals.days)
-async def listening_days_count(msg: Message, state: FSMContext):
-    try:
-        days = int(msg.text)
-        await delete_prev_message(msg.from_id, state)
-        m = await msg.answer('📷 Прикрепите видео или фото, относящееся к цели:',
-                             reply_markup=kb.prev_step_reply_kb)
-        await state.update_data(msg=m, days=days)
-        await Goals.media.set()
-    except ValueError:
-        await msg.answer('Неверный формат ввода. Попробуйте еще раз.',
-                         reply_markup=kb.prev_step_reply_kb)
-
-
-@dp.message_handler(state=Goals.days)
-async def listening_days_count(msg: Message, state: FSMContext):
-    try:
-        days = int(msg.text)
-        await delete_prev_message(msg.from_id, state)
-        m = await msg.answer('📷 Прикрепите видео или фото, относящееся к цели:',
-                             reply_markup=kb.prev_step_reply_kb)
-        await state.update_data(msg=m, days=days)
         await Goals.media.set()
     except ValueError:
         await msg.answer('Неверный формат ввода. Попробуйте еще раз.',
@@ -751,20 +735,18 @@ async def listening_comment(msg: Message, state: FSMContext):
     caption = f"{user_output}\n\n" \
               f"<b>Notion:</b>\n{data['notion_link']}\n\n" \
               f"💰<b>Сумма закрытия:</b> {data['check_amount']}\n\n" \
-              f"📆 <b>Кол-во дней:</b> {data['days']}\n\n" \
               f"💬 <b>Комментарий:</b>\n- {msg.text}"
 
     if 'file_photo' in data:
-        await bot.send_photo(chat_id=CONFIG['goals_channel'],
+        await bot.send_photo(chat_id=CONFIG['channels']['goals_channel'],
                              photo=data['file_photo'],
                              caption=caption)
     elif 'file_video' in data:
-        await bot.send_video(chat_id=CONFIG['goals_channel'],
+        await bot.send_video(chat_id=CONFIG['channels']['goals_channel'],
                              video=data['file_video'],
                              caption=caption)
 
     m = await msg.answer('Отчёт о выполненной цели добавлен ✅',
                          reply_markup=kb.member_menu_kb)
+    await member_reset(state)
     await state.update_data(msg=m)
-    await SessionRole.member.set()
-

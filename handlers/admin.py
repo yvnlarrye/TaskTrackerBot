@@ -168,6 +168,7 @@ async def remove_user_pick(cb: CallbackQuery, state: FSMContext):
 
 @dp.callback_query_handler(text='approve_remove', state=UserEdition.remove_member)
 async def approve_remove_member(cb: CallbackQuery, state: FSMContext):
+    await cb.message.delete()
     data = await state.get_data()
     user_index = data['member_index']
     users = data['curr_users']
@@ -175,6 +176,7 @@ async def approve_remove_member(cb: CallbackQuery, state: FSMContext):
     await sqlite_db.remove_user_by_id(user_id)
     await cb.message.answer(f'Участник @{users[user_index][3]} удалён',
                             reply_markup=kb.admin_menu_kb)
+    await SessionRole.admin.set()
 
 
 async def upd_selected_users(cb: CallbackQuery, state: FSMContext, text: str):
@@ -325,7 +327,7 @@ async def change_request_channel(cb: CallbackQuery):
 @dp.message_handler(state=Channel.listening_request_channel)
 async def listening_request_channel(msg: Message):
     channel_id = msg.forward_from_chat.id
-    CONFIG['request_channel'] = channel_id
+    CONFIG['channels']['request_channel'] = channel_id
     with open('data/config.json', 'w', encoding='utf-8') as json_file:
         json.dump(CONFIG, json_file, ensure_ascii=False, indent=4)
     await msg.answer('Канал запросов успешно обновлен',
@@ -345,7 +347,7 @@ async def change_report_channel(cb: CallbackQuery):
 @dp.message_handler(state=Channel.listening_report_channel)
 async def listening_report_channel(msg: Message):
     channel_id = msg.forward_from_chat.id
-    CONFIG['report_channel'] = channel_id
+    CONFIG['channels']['report_channel'] = channel_id
     with open('data/config.json', 'w', encoding='utf-8') as json_file:
         json.dump(CONFIG, json_file, ensure_ascii=False, indent=4)
     await msg.answer('Канал отчётности успешно обновлен',
@@ -365,7 +367,7 @@ async def change_goals_channel(cb: CallbackQuery):
 @dp.message_handler(state=Channel.listening_goals_channel)
 async def listening_goals_channel(msg: Message):
     channel_id = msg.forward_from_chat.id
-    CONFIG['goals_channel'] = channel_id
+    CONFIG['channels']['goals_channel'] = channel_id
     with open('data/config.json', 'w', encoding='utf-8') as json_file:
         json.dump(CONFIG, json_file, ensure_ascii=False, indent=4)
     await msg.answer('Канал закрытых целей успешно обновлен',
@@ -404,7 +406,7 @@ async def approve_removing_request(cb: CallbackQuery, state: FSMContext):
     msg_id = request[8]
     await sqlite_db.remove_request_by_id(request_id)
     try:
-        await bot.delete_message(chat_id=CONFIG['request_channel'],
+        await bot.delete_message(chat_id=CONFIG['channels']['request_channel'],
                                  message_id=msg_id)
     except Exception as e:
         print(f'Channel which contains this request probably was changed.\n{e}')
@@ -464,7 +466,7 @@ async def finish_user_status_edition(cb: CallbackQuery, state: FSMContext):
     new_status = STATUS[list(STATUS.keys())[status_index]]['value']
     await sqlite_db.update_user_status(user_id, new_status)
 
-    user_reports = await sqlite_db.get_user_requests(user_id)
+    user_reports = await sqlite_db.get_user_reports(user_id)
     for report in user_reports:
         report_id = report[0]
         await update_report_message(report_id)

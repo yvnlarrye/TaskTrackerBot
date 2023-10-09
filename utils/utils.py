@@ -1,6 +1,5 @@
 from aiogram.dispatcher import FSMContext
 from aiogram.utils.exceptions import MessageToDeleteNotFound
-
 from data import sqlite_db
 from dispatcher import bot
 from states import SessionRole
@@ -46,7 +45,9 @@ async def format_recipients(users: list, users_indices: list = None):
             else:
                 formatted_users[user_index] = formatted_users[user_index] + ' 🟢'
     formatted_users.insert(0, '<b>Выберите, кому отправляется запрос:</b>')
-    formatted_users.append('🔵 - основной исполнитель\n'
+    formatted_users.append('Вы можете выбрать одного или нескольких исполнителей.\n'
+                           'Первый - основной исполнитель, остальные - вспомогательные.'
+                           '🔵 - основной исполнитель\n'
                            '🟢 - вспомогательные исполнители')
     return '\n\n'.join(formatted_users)
 
@@ -134,4 +135,15 @@ def requestContainsUser(request: tuple, user: tuple) -> bool:
         return True
 
     return False
+
+
+async def get_user_earned_total_amount(user_id: int):
+    reports = await sqlite_db.get_user_reports(user_id)
+    total_amount = 0
+    for report in reports:
+        earned = report[2]
+        total_amount += earned
+    return total_amount
+
+
 

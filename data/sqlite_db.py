@@ -28,15 +28,15 @@ def create_tables():
     )
     cur.execute(
         'CREATE TABLE IF NOT EXISTS requests ('
-        'id         INTEGER  PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,'
-        'author_id  INTEGER  REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,'
-        'status     INTEGER  NOT NULL DEFAULT (1),'
-        'addressers TEXT     NOT NULL,'
+        'id                   INTEGER  PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,'
+        'author_id            INTEGER  REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,'
+        'status               INTEGER  NOT NULL DEFAULT (1),'
+        'addressers           TEXT     NOT NULL,'
         'main_recipient       TEXT     NOT NULL,'
-        'secondary_recipients TEXT,'
-        'text       TEXT     NOT NULL,'
-        'datetime   DATETIME NOT NULL,'
-        'message_id INTEGER  UNIQUE'
+        'secondary_recipient  TEXT,'
+        'text                 TEXT      NOT NULL,'
+        'date                 TEXT      NOT NULL,'
+        'message_id           INTEGER   UNIQUE'
         ')'
     )
 
@@ -48,7 +48,7 @@ def create_tables():
         'done_tasks      TEXT    NOT NULL, '
         'not_done_tasks  TEXT    NOT NULL, '
         'scheduled_tasks TEXT    NOT NULL, '
-        'message_id INTEGER UNIQUE'
+        'message_id      INTEGER UNIQUE'
         ')'
     )
 
@@ -113,19 +113,13 @@ async def user_exists(telegram_id: int):
     return bool(len(result.fetchall()))
 
 
-async def get_usernames():
-    """Get usernames list"""
-    result = cur.execute('SELECT username FROM users')
-    return result.fetchall()
-
-
 async def add_request(author_id: int, status: int, addressers: str, main_recipient: str,
-                      secondary_recipients: str, text: str, datetime: str):
+                      secondary_recipient: str, text: str, date: str):
     cur.execute(
         "INSERT INTO requests ("
-        "author_id, status, addressers, main_recipient, secondary_recipients, text, datetime"
+        "author_id, status, addressers, main_recipient, secondary_recipient, text, date"
         ") values (?, ?, ?, ?, ?, ?, ?)",
-        (author_id, status, addressers, main_recipient, secondary_recipients, text, datetime,)
+        (author_id, status, addressers, main_recipient, secondary_recipient, text, date,)
     )
     db.commit()
 
@@ -175,10 +169,10 @@ async def update_request_addressers(request_id: int, addressers: str):
     db.commit()
 
 
-async def update_request_recipients(request_id: int, main_recipient: str, secondary_recipients: str):
+async def update_request_recipients(request_id: int, main_recipient: str, secondary_recipient: str):
     cur.execute(
-        "UPDATE requests SET main_recipient = ?, secondary_recipients = ? WHERE id = ?",
-        (main_recipient, secondary_recipients, request_id,)
+        "UPDATE requests SET main_recipient = ?, secondary_recipient = ? WHERE id = ?",
+        (main_recipient, secondary_recipient, request_id,)
     )
     db.commit()
 
@@ -190,9 +184,9 @@ async def update_request_text(request_id, text: str):
     db.commit()
 
 
-async def update_request_datetime(request_id, datetime: str):
+async def update_request_date(request_id, date: str):
     cur.execute(
-        "UPDATE requests SET datetime = ? WHERE id = ?", (datetime, request_id,)
+        "UPDATE requests SET date = ? WHERE id = ?", (date, request_id,)
     )
     db.commit()
 
@@ -341,7 +335,3 @@ async def get_user_status_by_id(user_id: int):
     )
     return result.fetchone()[0]
 
-
-async def close():
-    """Закрываем соединение с БД"""
-    db.close()
