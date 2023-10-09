@@ -1,5 +1,6 @@
 from aiogram.dispatcher import FSMContext
 from aiogram.types import Message
+from aiogram.utils.exceptions import ChatNotFound
 from aiogram.utils.markdown import hlink
 from data.config import PASS
 from dispatcher import dp
@@ -16,8 +17,13 @@ from data.config import CONFIG
 
 async def is_user_joined_all_chats(user_id: int):
     for chat_id in CONFIG['channels'].values():
-        user_channel_status = await bot.get_chat_member(user_id=user_id, chat_id=chat_id)
-        if user_channel_status['status'] == 'left':
+        try:
+            user_channel_status = await bot.get_chat_member(user_id=user_id, chat_id=chat_id)
+            if user_channel_status['status'] == 'left':
+                return False
+        except ChatNotFound:
+            await bot.send_message(chat_id=user_id,
+                                   text='Для корректной работы добавьте бота во все подключенные чаты.')
             return False
     return True
 

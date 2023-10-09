@@ -9,7 +9,7 @@ from data.config import STATUS
 
 intro_admin_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     KeyboardButton('👨‍💻 Участник'),
-    KeyboardButton('☠️ Админ')
+    KeyboardButton('🏴‍☠️ Админ')
 ).add(
     KeyboardButton('🏆📈 Топы'),
 )
@@ -49,6 +49,8 @@ admin_menu_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
 points_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     KeyboardButton('📊 Начислить баллы'),
     KeyboardButton('🚫 Отнять баллы')
+).add(
+    KeyboardButton('↩️ Вернуться назад')
 )
 
 channels_kb = InlineKeyboardMarkup().add(
