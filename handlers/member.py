@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 
 from aiogram.dispatcher import FSMContext
@@ -9,11 +10,13 @@ from aiogram.types import (
 from aiogram.utils.markdown import hlink
 
 from dispatcher import dp, bot
+from google.google_manager import upload_file_to_google_drive
 from keyboards import keyboards as kb
 from keyboards.keyboards import apply_tasks_kb
 from utils.reports import print_report, update_report_message
 from utils.request import (
-    request_to_user, request_from_user, commit_request, print_request, update_request_message
+    request_to_user, request_from_user, commit_request, print_request, update_request_message,
+    update_req_recipients_points
 )
 from utils.utils import (
     format_recipients, format_addressers, commit_report, delete_prev_message, get_status_icon
@@ -35,12 +38,14 @@ async def member_start(msg: Message, state: FSMContext):
 
 
 @dp.message_handler(text='↩️ Вернуться назад', state=[SessionRole.member, CreateRequest.text,
-                                                      CreateRequest.time, CreateRequest.date,
-                                                      CreateReport.earned,
+                                                      CreateRequest.date, CreateReport.earned,
                                                       EditRequest.date, EditRequest.text,
                                                       EditRequest.status, EditReport.earned,
                                                       Goals.days, Goals.media, Goals.check_amount,
-                                                      Goals.notion_link, Goals.comment])
+                                                      Goals.notion_link, Goals.comment,
+                                                      EditRequest.video,
+                                                      EditRequest.video])
+# @dp.message_handler(text='↩️ Вернуться назад', state='*')
 async def back_to_member_menu_kb(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     await member_start(msg, state)
@@ -48,10 +53,10 @@ async def back_to_member_menu_kb(msg: Message, state: FSMContext):
 
 @dp.callback_query_handler(text='prev_step', state=[SessionRole.member, EditRequest.select_member_request,
                                                     EditRequest.select_request_headers,
-                                                    EditRequest.time, EditRequest.status,
+                                                    EditRequest.date, EditRequest.status,
                                                     EditRequest.addressers, EditRequest.recipients,
                                                     CreateRequest.request_from, CreateRequest.request_to,
-                                                    CreateRequest.time,
+                                                    CreateRequest.date,
                                                     CreateReport.list_of_done_tasks,
                                                     CreateReport.list_of_not_done_tasks,
                                                     CreateReport.list_of_scheduled_tasks,
@@ -61,6 +66,7 @@ async def back_to_member_menu_kb(msg: Message, state: FSMContext):
                                                     EditReport.select_report_headers,
                                                     EditReport.select_member_report
                                                     ])
+# @dp.callback_query_handler(text='prev_step', state='*')
 async def back_to_member_menu_cb(cb: CallbackQuery, state: FSMContext):
     await cb.message.delete()
     await member_start(cb.message, state)
@@ -174,7 +180,7 @@ async def confirm_creating_request(cb: CallbackQuery, state: FSMContext):
     ]
     main_recipient = users[data['main_recipient']]
     main_recipient = (main_recipient[3], main_recipient[4], main_recipient[5], main_recipient[7],)
-    if 'secondary_recipient' in data:
+    if data['secondary_recipient'] is not None:
         secondary_recipient = users[data['secondary_recipient']]
         secondary_recipient = (
             secondary_recipient[3], secondary_recipient[4], secondary_recipient[5], secondary_recipient[7],
@@ -273,24 +279,14 @@ async def edit_request_status(cb: CallbackQuery, state: FSMContext):
                                 reply_markup=kb.prev_step_reply_kb)
         return
 
-    sign = None
-    if status != 2 and request_status == 2:
-        sign = -1
     if status == 2 and request_status != 2:
-        sign = 1
+        await cb.message.answer('📺 Загрузите видео с зума:',
+                                reply_markup=kb.prev_step_reply_kb)
+        await EditRequest.video.set()
+        return
 
-    if sign is not None:
-        main_recipient_id = (await sqlite_db.get_user_by_username(curr_request[4]))[0]
-        main_recipient_rate = await sqlite_db.get_user_points(main_recipient_id)
-        main_recipient_rate += 1 * sign
-        await sqlite_db.update_user_points(main_recipient_id, main_recipient_rate)
-
-        secondary_recipient = curr_request[5]
-        if secondary_recipient != '':
-            secondary_recipient_id = (await sqlite_db.get_user_by_username(curr_request[5]))[0]
-            recipient_rate = await sqlite_db.get_user_points(secondary_recipient_id)
-            recipient_rate += 0.5 * sign
-            await sqlite_db.update_user_points(secondary_recipient_id, recipient_rate)
+    if status != 2 and request_status == 2:
+        await update_req_recipients_points(curr_request, '-')
 
     await sqlite_db.update_request_status(request_id, status)
     await update_request_message(request_id)
@@ -298,6 +294,37 @@ async def edit_request_status(cb: CallbackQuery, state: FSMContext):
     await cb.message.answer('Статус запроса успешно обновлён',
                             reply_markup=kb.member_menu_kb)
     await member_reset(state)
+
+
+@dp.message_handler(state=EditRequest.video, content_types=['video'])
+async def listen_request_video(msg: Message, state: FSMContext):
+    if msg.video:
+        m = await msg.answer('Подождите, идёт загрузка видео...')
+        file = await bot.get_file(msg.video.file_id)
+        file_extension = msg.video.file_name.split('.')[-1]
+        file_path = f"temp/video.{file_extension}"
+        await bot.download_file(file.file_path, file_path)
+
+        user = await sqlite_db.get_user_by_id(await sqlite_db.get_user_id(msg.from_id))
+
+        data = await state.get_data()
+        curr_request = data['req']
+        request_id = curr_request[0]
+        file_name = f"{msg.from_id}_video_{request_id}.{file_extension}"
+
+        video_shared_link = upload_file_to_google_drive(user, file_name, file_path)
+
+        await sqlite_db.update_request_status(request_id, 2)
+        await update_request_message(request_id, video_shared_link)
+
+        os.remove(file_path)
+
+        await m.delete()
+        await msg.delete()
+
+        await msg.answer('Статус запроса успешно обновлён ✅',
+                         reply_markup=kb.member_menu_kb)
+        await member_reset(state)
 
 
 @dp.callback_query_handler(Text(startswith='user_'), state=EditRequest.addressers)
@@ -315,7 +342,7 @@ async def confirm_edit_addressers(cb: CallbackQuery, state: FSMContext):
 
     await update_request_message(request_id)
 
-    await cb.message.answer('Отправители запроса успешно изменены',
+    await cb.message.answer('Отправители запроса успешно изменены ✅',
                             reply_markup=kb.member_menu_kb)
     await cb.message.delete()
     await member_reset(state)
@@ -335,13 +362,13 @@ async def confirm_edit_recipients(cb: CallbackQuery, state: FSMContext):
         users = data['curr_users']
         request_id = data['req'][0]
         main_recipient = users[data['main_recipient']][3]
-        if 'secondary_recipient' in data:
+        if data['secondary_recipient'] is not None:
             secondary_recipient = users[data['secondary_recipient']][3]
         else:
             secondary_recipient = ''
         await sqlite_db.update_request_recipients(request_id, main_recipient, secondary_recipient)
         await update_request_message(request_id)
-        await cb.message.answer('Получатели успешно изменены.',
+        await cb.message.answer('Получатели успешно изменены ✅',
                                 reply_markup=kb.member_menu_kb)
         await cb.message.delete()
         await member_reset(state)

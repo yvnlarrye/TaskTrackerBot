@@ -45,6 +45,7 @@ class EditRequest(StatesGroup):
     addressers = State()
     recipients = State()
     text = State()
+    video = State()
 
 
 class CreateReport(StatesGroup):

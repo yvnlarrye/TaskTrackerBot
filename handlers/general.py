@@ -4,7 +4,8 @@ from aiogram.utils.exceptions import ChatNotFound
 from aiogram.utils.markdown import hlink
 from data.config import PASS
 from dispatcher import dp
-from states import SessionRole, UserEdition, MemberRegistration
+from keyboards.keyboards import permission_denied_message
+from states import SessionRole, MemberRegistration
 from utils.utils import is_admin, get_status_icon
 from handlers.admin import admin_start
 from handlers.member import member_start
@@ -17,31 +18,14 @@ from data.config import CONFIG
 
 async def is_user_joined_all_chats(user_id: int):
     for chat_id in CONFIG['channels'].values():
-        try:
-            user_channel_status = await bot.get_chat_member(user_id=user_id, chat_id=chat_id)
-            if user_channel_status['status'] == 'left':
-                return False
-        except ChatNotFound:
-            await bot.send_message(chat_id=user_id,
-                                   text='Для корректной работы добавьте бота во все подключенные чаты.')
+        user_channel_status = await bot.get_chat_member(user_id=user_id, chat_id=chat_id)
+        if user_channel_status['status'] == 'left':
             return False
     return True
 
 
-async def register_member(msg: Message, state: FSMContext):
-    m = await msg.answer('Введите своё имя:',
-                         reply_markup=kb.prev_step_reply_kb)
-    await state.update_data(msg=m)
-    await MemberRegistration.name.set()
-
-
 async def send_permission_denied_message(msg: Message):
-    channels = '\n'.join([
-        (await bot.create_chat_invite_link(chat_id=chat_id)).invite_link
-        for chat_id in CONFIG['channels'].values()
-    ])
-    await msg.answer(f'🚫 У вас нет доступа к данному сервису. Сначала зайдите во все каналы.\n'
-                     f'{channels}')
+    await msg.answer(permission_denied_message)
 
 
 @dp.message_handler(state=MemberRegistration.name)
@@ -70,19 +54,23 @@ async def reg_listen_member_surname(msg: Message, state: FSMContext):
 @dp.message_handler(commands=['start'], state='*')
 async def start(msg: Message, state: FSMContext):
     await state.finish()
-    if await is_user_joined_all_chats(msg.from_id):
-        if await sqlite_db.user_exists(msg.from_id):
-            if await is_admin(msg.from_id):
-                keyboard = kb.intro_admin_kb
+    try:
+        if await is_user_joined_all_chats(msg.from_id):
+            if await sqlite_db.user_exists(msg.from_id):
+                if await is_admin(msg.from_id):
+                    keyboard = kb.intro_admin_kb
+                else:
+                    keyboard = kb.intro_member_kb
+                m = await msg.answer('Выбери, за кого зайти:',
+                                     reply_markup=keyboard)
+                await state.update_data(msg=m)
             else:
-                keyboard = kb.intro_member_kb
-            m = await msg.answer('Выбери, за кого зайти:',
-                                 reply_markup=keyboard)
-            await state.update_data(msg=m)
+                await msg.answer('🚫 У вас нет доступа к боту. Свяжитесь с администратором.')
         else:
-            await register_member(msg, state)
-    else:
-        await send_permission_denied_message(msg)
+            await send_permission_denied_message(msg)
+    except ChatNotFound:
+        await bot.send_message(chat_id=msg.from_id,
+                               text='Для корректной работы добавьте бота во все подключенные чаты.')
     await msg.delete()
 
 
@@ -111,10 +99,6 @@ async def admin(msg: Message, state: FSMContext):
                     await sqlite_db.update_user_role(user_id, 1)
                     await msg.answer('Новый администратор добавлен')
                     await start(msg, state)
-                else:
-                    await msg.answer('Отправьте ваше имя и фамилию:\n'
-                                     'Например: Иван Иванов')
-                    await UserEdition.new_admin_name.set()
     else:
         await send_permission_denied_message(msg)
 
@@ -140,7 +124,7 @@ async def login_as_admin(msg: Message, state: FSMContext):
             else:
                 await msg.answer('🚫 У вас нет прав администратора.')
         else:
-            await msg.answer('🚫 У вас нет доступа к данному сервису. Свяжитесь с администратором сервиса.')
+            await msg.answer('🚫 У вас нет доступа к боту. Свяжитесь с администратором.')
     else:
         await send_permission_denied_message(msg)
     await msg.delete()

@@ -42,9 +42,9 @@ async def request_to_user(cb: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     if 'request_to' not in data:
         await state.update_data(request_to=[])
-
     data = await state.get_data()
     to_members_indices = data['request_to']
+
     prev_step_indices = to_members_indices.copy()
 
     if member_index in to_members_indices:
@@ -55,7 +55,8 @@ async def request_to_user(cb: CallbackQuery, state: FSMContext):
     await state.update_data(request_to=to_members_indices)
     if len(to_members_indices):
         if len(to_members_indices) == 1:
-            await state.update_data(main_recipient=to_members_indices[0])
+            await state.update_data(main_recipient=to_members_indices[0],
+                                    secondary_recipient=None)
         elif len(to_members_indices) == 2:
             await state.update_data(main_recipient=to_members_indices[0],
                                     secondary_recipient=to_members_indices[1])
@@ -80,7 +81,7 @@ async def commit_request(data: dict):
     users = data['curr_users']
     addressers = '\n'.join([users[user_index][3] for user_index in data['request_from']])
     main_recipient = users[data['main_recipient']][3]
-    if 'secondary_recipient' in data:
+    if data['secondary_recipient'] is not None:
         secondary_recipient = users[data['secondary_recipient']][3]
     else:
         secondary_recipient = ''
@@ -97,7 +98,7 @@ async def commit_request(data: dict):
 
 
 def print_request(request_id: int, status: int, addressers: list, main_recipient: tuple,
-                  secondary_recipient: tuple, text: str, date: str):
+                  secondary_recipient: tuple, text: str, date: str, video_link=None):
     addr_output = '\n'.join([
         f"{get_status_icon(addresser[3])} {hlink(f'{addresser[1]} {addresser[2]}', f'https://t.me/{addresser[0]}')} — {addresser[3]}"
         for addresser in addressers
@@ -111,6 +112,10 @@ def print_request(request_id: int, status: int, addressers: list, main_recipient
             f"{secondary_recipient[3]}\n\n"
     else:
         secondary_recipient_output = ''
+
+    video_link_output = ''
+    if video_link is not None:
+        video_link_output = '\n\n' + hlink('Запись с Zoom', video_link)
 
     result = f"Запрос #{request_id}\n\n" \
              f"<b>Статус:</b>\n" \
@@ -127,7 +132,8 @@ def print_request(request_id: int, status: int, addressers: list, main_recipient
              f"<b>Запрос:</b>\n" \
              f"{text}\n" \
              f"\n" \
-             f"<b>Срок:</b> {date}"
+             f"<b>Срок:</b> {date}" \
+             f"{video_link_output}"
     return result
 
 
@@ -142,7 +148,7 @@ def request_status_str(request_status: int):
         raise AttributeError
 
 
-async def update_request_message(request_id):
+async def update_request_message(request_id, video_link=None):
     curr_request = await sqlite_db.get_request_by_id(request_id)
     req_status = request_status_str(curr_request[2])
     addressers = curr_request[3].split('\n')
@@ -171,8 +177,29 @@ async def update_request_message(request_id):
     date = curr_request[7]
     message_id = curr_request[8]
     new_output = print_request(request_id, req_status, addressers_transfer_data, main_recipient_transfer_data,
-                               secondary_recipient_transfer_data, text, date)
+                               secondary_recipient_transfer_data, text, date, video_link)
     try:
         await bot.edit_message_text(text=new_output, chat_id=CONFIG['channels']['request_channel'], message_id=message_id)
     except MessageNotModified:
         pass
+
+
+async def update_req_recipients_points(req, update_mode: str):
+    sign = None
+    if update_mode == '+':
+        sign = 1
+    elif update_mode == '-':
+        sign = -1
+
+    if sign is not None:
+        main_recipient_id = (await sqlite_db.get_user_by_username(req[4]))[0]
+        main_recipient_rate = await sqlite_db.get_user_points(main_recipient_id)
+        main_recipient_rate += 1 * sign
+        await sqlite_db.update_user_points(main_recipient_id, main_recipient_rate)
+
+        secondary_recipient = req[5]
+        if secondary_recipient != '':
+            secondary_recipient_id = (await sqlite_db.get_user_by_username(req[5]))[0]
+            recipient_rate = await sqlite_db.get_user_points(secondary_recipient_id)
+            recipient_rate += 0.5 * sign
+            await sqlite_db.update_user_points(secondary_recipient_id, recipient_rate)
