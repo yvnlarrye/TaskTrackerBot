@@ -88,12 +88,35 @@ async def refresh_role(state: FSMContext):
 
 
 async def commit_report(data: dict):
-    author_id = await sqlite_db.get_user_id(data['user_id'])
+    user_id = await sqlite_db.get_user_id(data['user_id'])
     earned = data['earned']
-    done_tasks = '\n'.join(data['done_tasks_list'])
-    not_done_tasks = '\n'.join(data['not_done_tasks_list'])
-    scheduled_tasks = '\n'.join(data['scheduled_tasks_list'])
-    await sqlite_db.add_report(author_id, earned, done_tasks, not_done_tasks, scheduled_tasks)
+
+    new_scheduled_tasks = data['new_scheduled_tasks']
+
+    for task_description in new_scheduled_tasks:
+        user_id = await sqlite_db.get_user_id(data['user_id'])
+        await sqlite_db.add_scheduled_task(user_id, task_description)
+
+    scheduled_tasks = '\n'.join(new_scheduled_tasks)
+    if 'curr_tasks' in data:
+        curr_tasks = data['curr_tasks']
+        for task in curr_tasks:
+            await sqlite_db.remove_scheduled_task_by_id(task[0])
+
+    if 'done_tasks' in data and 'not_done_tasks' in data:
+        done_tasks = data['done_tasks']
+        not_done_tasks = data['not_done_tasks']
+        done_tasks = '\n'.join([task[2] for task in done_tasks])
+        not_done_tasks = '\n'.join([task[2] for task in not_done_tasks])
+        await sqlite_db.add_report(author_id=user_id,
+                                   earned=earned,
+                                   done_tasks=done_tasks,
+                                   not_done_tasks=not_done_tasks,
+                                   scheduled_tasks=scheduled_tasks)
+    else:
+        await sqlite_db.add_report(author_id=user_id,
+                                   earned=earned,
+                                   scheduled_tasks=scheduled_tasks)
 
 
 async def delete_prev_message(chat_id, state: FSMContext):

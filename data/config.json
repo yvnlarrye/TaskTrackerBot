@@ -1,16 +1,8 @@
 {
     "channels": {
-        "report_channel": -1001982368833,
-        "request_channel": -1001816031562,
-        "goals_channel": -1001870833490,
-        "general": -1001534514369,
-        "daily_reports": -1001976036287,
-        "weekly_reports": -1001897848608,
-        "monthly_reports": -1001964041553,
-        "questions": -1001816334457,
-        "tables": -1001970518348,
-        "learning": -1001962418832,
-        "news": -1001962331016
+        "report_channel": -1001980530409,
+        "request_channel": -1001901646542,
+        "goals_channel": -1001859418472
     },
     "request_status": {
         "not_done": "❌ — Не выполнено",

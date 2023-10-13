@@ -12,8 +12,9 @@ from aiogram.utils.markdown import hlink
 from dispatcher import dp, bot
 from google.google_manager import upload_file_to_google_drive
 from keyboards import keyboards as kb
-from keyboards.keyboards import apply_tasks_kb
-from utils.reports import print_report, update_report_message
+from utils.reports import (
+    print_report, update_report_message, update_selected_done_tasks
+)
 from utils.request import (
     request_to_user, request_from_user, commit_request, print_request, update_request_message,
     update_req_recipients_points
@@ -411,7 +412,7 @@ async def edit_date(msg: Message, state: FSMContext):
 
 
 @dp.message_handler(text='📩 Отчетность', state=SessionRole.member)
-async def reporting(msg: Message, state: FSMContext):
+async def add_earned(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     m = await msg.answer('Сколько заработали 💰₽ за сегодняшний день?\n'
                          'Введите значение в следующем формате: 150000',
@@ -421,82 +422,80 @@ async def reporting(msg: Message, state: FSMContext):
 
 
 @dp.message_handler(state=CreateReport.earned)
-async def add_phone_time(msg: Message, state: FSMContext):
+async def enter_done_tasks(msg: Message, state: FSMContext):
     try:
         result = int(msg.text)
         await delete_prev_message(msg.from_id, state)
-        message = await msg.answer('✅ Введите список выполненных сегодня задач (по одной):',
-                                   reply_markup=apply_tasks_kb())
-        await state.update_data(earned=result, user_id=msg.from_id, msg_id=message.message_id,
-                                done_tasks_list=[])
-        await CreateReport.list_of_done_tasks.set()
+
+        user_id = await sqlite_db.get_user_id(msg.from_id)
+        user_scheduled_tasks = await sqlite_db.get_user_scheduled_tasks(user_id)
+        if len(user_scheduled_tasks):
+            await state.update_data(earned=result, user_id=msg.from_id, curr_tasks=user_scheduled_tasks,
+                                    done_tasks_indices=[])
+            await msg.answer('✅ Выберите задачи, которые сегодня выполнили:\n'
+                             '(Не помеченные задачи автоматически будут иметь статус не выполненных)',
+                             reply_markup=kb.scheduled_tasks_kb(user_scheduled_tasks))
+            await CreateReport.list_of_done_tasks.set()
+        else:
+            message = await msg.answer('📝 Введите список запланированных на завтра задач:\n'
+                                       '(Отправьте задачи по одной, а в конце нажмите "Подтвердить")',
+                                       reply_markup=kb.apply_tasks_kb())
+            await state.update_data(msg_id=message.message_id, user_id=msg.from_id, earned=result,
+                                    new_scheduled_tasks=[])
+            await CreateReport.list_of_scheduled_tasks.set()
     except ValueError:
         await msg.answer('Неверный формат ввода. Попробуйте еще раз.')
 
 
-@dp.message_handler(state=CreateReport.list_of_done_tasks)
-async def listening_done_tasks(msg: Message, state: FSMContext):
-    data = await state.get_data()
-    done_tasks_list = data['done_tasks_list']
-    done_tasks_list.append(msg.text)
-    await state.update_data(done_tasks_list=done_tasks_list)
-    data = await state.get_data()
-    append_text = '\n'.join(['- ' + task for task in data['done_tasks_list']])
-    await bot.edit_message_text(text=f"✅ Введите список выполненных сегодня задач (по одной):\n\n"
-                                     f"{append_text}",
-                                chat_id=msg.from_id,
-                                message_id=data['msg_id'],
-                                reply_markup=apply_tasks_kb())
+@dp.callback_query_handler(Text(startswith='task_'), state=CreateReport.list_of_done_tasks)
+async def select_done_tasks(cb: CallbackQuery, state: FSMContext):
+    await update_selected_done_tasks(cb, state, '✅ Выберите задачи, которые сегодня выполнили:\n'
+                                                '(Не помеченные задачи автоматически будут иметь статус не выполненных)')
 
 
-@dp.callback_query_handler(text='apply_tasks', state=CreateReport.list_of_done_tasks)
-async def apply_done_tasks(cb: CallbackQuery, state: FSMContext):
+@dp.callback_query_handler(text='next_step', state=CreateReport.list_of_done_tasks)
+async def enter_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
     await cb.message.delete()
-    message = await cb.message.answer('❌ Введите список не выполненных сегодня задач (по одной):',
-                                      reply_markup=apply_tasks_kb())
-    await state.update_data(msg_id=message.message_id,
-                            not_done_tasks_list=[])
-    await CreateReport.list_of_not_done_tasks.set()
-
-
-@dp.message_handler(state=CreateReport.list_of_not_done_tasks)
-async def listening_not_done_tasks(msg: Message, state: FSMContext):
     data = await state.get_data()
-    not_done_tasks_list = data['not_done_tasks_list']
-    not_done_tasks_list.append(msg.text)
-    await state.update_data(not_done_tasks_list=not_done_tasks_list)
-    data = await state.get_data()
-    append_text = '\n'.join(['- ' + task for task in data['not_done_tasks_list']])
-    await bot.edit_message_text(text=f"❌ Введите список не выполненных сегодня задач (по одной):\n\n"
-                                     f"{append_text}",
-                                chat_id=msg.from_id,
-                                message_id=data['msg_id'],
-                                reply_markup=apply_tasks_kb())
+    curr_tasks = data['curr_tasks']
+    done_tasks_indices = data['done_tasks_indices']
 
+    done_tasks = []
+    not_done_tasks = []
+    for i in range(len(curr_tasks)):
+        if i in done_tasks_indices:
+            done_tasks.append(curr_tasks[i])
+        else:
+            not_done_tasks.append(curr_tasks[i])
 
-@dp.callback_query_handler(text='apply_tasks', state=CreateReport.list_of_not_done_tasks)
-async def apply_not_done_tasks(cb: CallbackQuery, state: FSMContext):
-    await cb.message.delete()
-    message = await cb.message.answer('📝 Введите список запланированных на завтра задач (по одной):',
-                                      reply_markup=apply_tasks_kb())
+    if len(done_tasks):
+        await state.update_data(done_tasks=done_tasks)
+    if len(not_done_tasks):
+        await state.update_data(not_done_tasks=not_done_tasks)
+
+    message = await cb.message.answer('📝 Введите список запланированных на завтра задач:\n'
+                                      '(Отправьте задачи по одной, а в конце нажмите "Подтвердить")',
+                                      reply_markup=kb.apply_tasks_kb())
     await state.update_data(msg_id=message.message_id,
-                            scheduled_tasks_list=[])
+                            new_scheduled_tasks=[])
     await CreateReport.list_of_scheduled_tasks.set()
 
 
 @dp.message_handler(state=CreateReport.list_of_scheduled_tasks)
 async def listening_scheduled_tasks(msg: Message, state: FSMContext):
+    await msg.delete()
     data = await state.get_data()
-    scheduled_tasks_list = data['scheduled_tasks_list']
+    scheduled_tasks_list = data['new_scheduled_tasks']
     scheduled_tasks_list.append(msg.text)
-    await state.update_data(scheduled_tasks_list=scheduled_tasks_list)
+    await state.update_data(new_scheduled_tasks=scheduled_tasks_list)
     data = await state.get_data()
-    append_text = '\n'.join(['- ' + task for task in data['scheduled_tasks_list']])
-    await bot.edit_message_text(text=f"📝 Введите список запланированных на завтра задач (по одной):\n\n"
-                                     f"{append_text}",
+    append_text = '\n'.join(['- ' + task for task in data['new_scheduled_tasks']])
+    await bot.edit_message_text(text='📝 Введите список запланированных на завтра задач:\n'
+                                     '(Отправьте задачи по одной, а в конце нажмите "Подтвердить")\n\n'
+                                     f'{append_text}',
                                 chat_id=msg.from_id,
                                 message_id=data['msg_id'],
-                                reply_markup=apply_tasks_kb())
+                                reply_markup=kb.apply_tasks_kb())
 
 
 @dp.callback_query_handler(text='apply_tasks', state=CreateReport.list_of_scheduled_tasks)
@@ -513,17 +512,27 @@ async def apply_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
     user_name = user[3]
     user_status = user[7]
     earned = data['earned']
-    done_tasks = data['done_tasks_list']
-    not_done_tasks = data['not_done_tasks_list']
-    scheduled_tasks = data['scheduled_tasks_list']
 
     user = (user_name, first_name, surname, user_status,)
+
+    new_scheduled_tasks = data['new_scheduled_tasks']
+
+    done_tasks_descriptions = None
+    if 'done_tasks' in data:
+        done_tasks = data['done_tasks']
+        done_tasks_descriptions = [task[2] for task in done_tasks]
+
+    not_done_tasks_descriptions = None
+    if 'not_done_tasks' in data:
+        not_done_tasks = data['not_done_tasks']
+        not_done_tasks_descriptions = [task[2] for task in not_done_tasks]
+
     output = await print_report(report_id=report_id,
                                 user=user,
                                 earned=earned,
-                                done_tasks=done_tasks,
-                                not_done_tasks=not_done_tasks,
-                                scheduled_tasks=scheduled_tasks)
+                                scheduled_tasks=new_scheduled_tasks,
+                                done_tasks=done_tasks_descriptions,
+                                not_done_tasks=not_done_tasks_descriptions)
 
     await cb.message.answer(output, reply_markup=kb.member_menu_kb)
     msg = await bot.send_message(chat_id=CONFIG['channels']['report_channel'],
@@ -532,165 +541,178 @@ async def apply_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
     await member_reset(state)
 
 
-@dp.message_handler(text='✏️ Ред. отчётность', state=SessionRole.member)
-async def edit_user_report(msg: Message, state: FSMContext):
-    await delete_prev_message(msg.from_id, state)
-    user_id = await sqlite_db.get_user_id(msg.from_id)
-    await state.update_data(role_state=(await state.get_state()).split(':')[1])
-    reports = await sqlite_db.get_user_reports(user_id)
-    if len(reports):
-        await state.update_data(user_id=user_id, reps=reports)
-        await msg.answer('Выберите отчёт для редактирования:',
-                         reply_markup=(await kb.member_reports_kb(reports)))
-        await EditReport.select_member_report.set()
-    else:
-        await msg.answer('Этот участник еще не создал ни одного отчёта.',
-                         reply_markup=kb.prev_step_reply_kb)
+# "report_channel": -1001982368833,
+# "request_channel": -1001816031562,
+# "goals_channel": -1001870833490,
+# "general": -1001534514369,
+# "daily_reports": -1001976036287,
+# "weekly_reports": -1001897848608,
+# "monthly_reports": -1001964041553,
+# "questions": -1001816334457,
+# "tables": -1001970518348,
+# "learning": -1001962418832,
+# "news": -1001962331016
 
 
-@dp.callback_query_handler(Text(startswith='elm_'), state=EditReport.select_member_report)
-async def select_member_report(cb: CallbackQuery, state: FSMContext):
-    await cb.message.delete()
-    rep_index = int(cb.data[4:])
-    await state.update_data(rep=(await state.get_data())['reps'][rep_index])
-    await cb.message.answer('Выберите поле отчёта, которое хотите отредактировать:',
-                            reply_markup=(await kb.report_headers_kb()))
-    await EditReport.select_report_headers.set()
-
-
-@dp.callback_query_handler(Text(startswith='elm_'), state=EditReport.select_report_headers)
-async def select_report_headers(cb: CallbackQuery, state: FSMContext):
-    header_index = int(cb.data[4:])
-    await cb.message.delete()
-    match header_index:
-        case 0:
-            m = await cb.message.answer('Сколько заработали 💰₽ за сегодняшний день?\n'
-                                        'Введите значение в следующем формате: 150000',
-                                        reply_markup=kb.prev_step_reply_kb)
-            await state.update_data(msg=m)
-            await EditReport.earned.set()
-        case 1:
-            message = await cb.message.answer('✅ Введите список выполненных сегодня задач (по одной):',
-                                              reply_markup=apply_tasks_kb())
-            await state.update_data(done_tasks_list=[], message_id=message.message_id)
-            await EditReport.list_of_done_tasks.set()
-        case 2:
-            message = await cb.message.answer('❌ Введите список не выполненных сегодня задач (по одной):',
-                                              reply_markup=apply_tasks_kb())
-            await state.update_data(not_done_tasks_list=[], message_id=message.message_id)
-            await EditReport.list_of_not_done_tasks.set()
-        case 3:
-            message = await cb.message.answer('📝 Введите список запланированных на завтра задач (по одной):',
-                                              reply_markup=apply_tasks_kb())
-            await state.update_data(scheduled_tasks_list=[], message_id=message.message_id)
-            await EditReport.list_of_scheduled_tasks.set()
-
-
-@dp.message_handler(state=EditReport.earned)
-async def edit_phone_time(msg: Message, state: FSMContext):
-    try:
-        result = int(msg.text)
-        await delete_prev_message(msg.from_id, state)
-        data = await state.get_data()
-        report = data['rep']
-        report_id = report[0]
-        await sqlite_db.update_report_earned(report_id, result)
-
-        await update_report_message(report_id)
-
-        await msg.answer('<b>Заработанная сумма</b> успешно изменена',
-                         reply_markup=kb.member_menu_kb)
-        await member_reset(state)
-
-    except ValueError:
-        await msg.answer('Неверный формат ввода. Попробуйте еще раз.')
-
-
-@dp.message_handler(state=EditReport.list_of_done_tasks)
-async def edit_list_of_done_tasks(msg: Message, state: FSMContext):
-    data = await state.get_data()
-    done_tasks_list = data['done_tasks_list']
-    done_tasks_list.append(msg.text)
-    await state.update_data(done_tasks_list=done_tasks_list)
-    append_text = '\n'.join(['- ' + task for task in data['done_tasks_list']])
-    await bot.edit_message_text(text=f"✅ Введите список выполненных сегодня задач (по одной):\n\n"
-                                     f"{append_text}",
-                                chat_id=msg.from_id,
-                                message_id=data['message_id'],
-                                reply_markup=apply_tasks_kb())
-
-
-@dp.callback_query_handler(text='apply_tasks', state=EditReport.list_of_done_tasks)
-async def apply_edition_done_tasks(cb: CallbackQuery, state: FSMContext):
-    await cb.message.delete()
-    data = await state.get_data()
-    done_tasks = '\n'.join(data['done_tasks_list'])
-    report_id = data['rep'][0]
-    await sqlite_db.update_report_done_tasks(report_id, done_tasks)
-
-    await update_report_message(report_id)
-
-    await cb.message.answer('Выполненные задания успешно изменены',
-                            reply_markup=kb.member_menu_kb)
-    await member_reset(state)
-
-
-@dp.message_handler(state=EditReport.list_of_not_done_tasks)
-async def edit_list_of_not_done_tasks(msg: Message, state: FSMContext):
-    data = await state.get_data()
-    not_done_tasks_list = data['not_done_tasks_list']
-    not_done_tasks_list.append(msg.text)
-    await state.update_data(not_done_tasks_list=not_done_tasks_list)
-    append_text = '\n'.join(['- ' + task for task in data['not_done_tasks_list']])
-    await bot.edit_message_text(text=f"❌ Введите список не выполненных сегодня задач (по одной):\n\n"
-                                     f"{append_text}",
-                                chat_id=msg.from_id,
-                                message_id=data['message_id'],
-                                reply_markup=apply_tasks_kb())
-
-
-@dp.callback_query_handler(text='apply_tasks', state=EditReport.list_of_not_done_tasks)
-async def apply_edition_not_done_tasks(cb: CallbackQuery, state: FSMContext):
-    await cb.message.delete()
-    data = await state.get_data()
-    not_done_tasks = '\n'.join(data['not_done_tasks_list'])
-    report_id = data['rep'][0]
-    await sqlite_db.update_report_not_done_tasks(report_id, not_done_tasks)
-
-    await update_report_message(report_id)
-
-    await cb.message.answer('<b>Не выполненные задания</b> успешно изменены',
-                            reply_markup=kb.member_menu_kb)
-    await member_reset(state)
-
-
-@dp.message_handler(state=EditReport.list_of_scheduled_tasks)
-async def edit_list_of_scheduled_tasks(msg: Message, state: FSMContext):
-    data = await state.get_data()
-    scheduled_tasks = data['scheduled_tasks_list']
-    scheduled_tasks.append(msg.text)
-    await state.update_data(scheduled_tasks_list=scheduled_tasks)
-    append_text = '\n'.join(['- ' + task for task in data['scheduled_tasks_list']])
-    await bot.edit_message_text(text=f"📝 Введите список запланированных на завтра задач (по одной):\n\n"
-                                     f"{append_text}",
-                                chat_id=msg.from_id,
-                                message_id=data['message_id'],
-                                reply_markup=apply_tasks_kb())
-
-
-@dp.callback_query_handler(text='apply_tasks', state=EditReport.list_of_scheduled_tasks)
-async def apply_edition_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
-    await cb.message.delete()
-    data = await state.get_data()
-    scheduled_tasks = '\n'.join(data['scheduled_tasks_list'])
-    report_id = data['rep'][0]
-    await sqlite_db.update_report_scheduled_tasks(report_id, scheduled_tasks)
-
-    await update_report_message(report_id)
-
-    await cb.message.answer('<b>Запланированные задания</b> успешно изменены',
-                            reply_markup=kb.member_menu_kb)
-    await member_reset(state)
+# @dp.message_handler(text='✏️ Ред. отчётность', state=SessionRole.member)
+# async def edit_user_report(msg: Message, state: FSMContext):
+#     await delete_prev_message(msg.from_id, state)
+#     user_id = await sqlite_db.get_user_id(msg.from_id)
+#     await state.update_data(role_state=(await state.get_state()).split(':')[1])
+#     reports = await sqlite_db.get_user_reports(user_id)
+#     if len(reports):
+#         await state.update_data(user_id=user_id, reps=reports)
+#         await msg.answer('Выберите отчёт для редактирования:',
+#                          reply_markup=(await kb.member_reports_kb(reports)))
+#         await EditReport.select_member_report.set()
+#     else:
+#         await msg.answer('Этот участник еще не создал ни одного отчёта.',
+#                          reply_markup=kb.prev_step_reply_kb)
+#
+#
+# @dp.callback_query_handler(Text(startswith='elm_'), state=EditReport.select_member_report)
+# async def select_member_report(cb: CallbackQuery, state: FSMContext):
+#     await cb.message.delete()
+#     rep_index = int(cb.data[4:])
+#     await state.update_data(rep=(await state.get_data())['reps'][rep_index])
+#     await cb.message.answer('Выберите поле отчёта, которое хотите отредактировать:',
+#                             reply_markup=(await kb.report_headers_kb()))
+#     await EditReport.select_report_headers.set()
+#
+#
+# @dp.callback_query_handler(Text(startswith='elm_'), state=EditReport.select_report_headers)
+# async def select_report_headers(cb: CallbackQuery, state: FSMContext):
+#     header_index = int(cb.data[4:])
+#     await cb.message.delete()
+#     match header_index:
+#         case 0:
+#             m = await cb.message.answer('Сколько заработали 💰₽ за сегодняшний день?\n'
+#                                         'Введите значение в следующем формате: 150000',
+#                                         reply_markup=kb.prev_step_reply_kb)
+#             await state.update_data(msg=m)
+#             await EditReport.earned.set()
+#         case 1:
+#             message = await cb.message.answer('✅ Введите список выполненных сегодня задач (по одной):',
+#                                               reply_markup=kb.apply_tasks_kb())
+#             await state.update_data(done_tasks_list=[], message_id=message.message_id)
+#             await EditReport.list_of_done_tasks.set()
+#         case 2:
+#             message = await cb.message.answer('❌ Введите список не выполненных сегодня задач (по одной):',
+#                                               reply_markup=kb.apply_tasks_kb())
+#             await state.update_data(not_done_tasks_list=[], message_id=message.message_id)
+#             await EditReport.list_of_not_done_tasks.set()
+#         case 3:
+#             message = await cb.message.answer('📝 Введите список запланированных на завтра задач (по одной):',
+#                                               reply_markup=kb.apply_tasks_kb())
+#             await state.update_data(scheduled_tasks_list=[], message_id=message.message_id)
+#             await EditReport.list_of_scheduled_tasks.set()
+#
+#
+# @dp.message_handler(state=EditReport.earned)
+# async def edit_phone_time(msg: Message, state: FSMContext):
+#     try:
+#         result = int(msg.text)
+#         await delete_prev_message(msg.from_id, state)
+#         data = await state.get_data()
+#         report = data['rep']
+#         report_id = report[0]
+#         await sqlite_db.update_report_earned(report_id, result)
+#
+#         await update_report_message(report_id)
+#
+#         await msg.answer('<b>Заработанная сумма</b> успешно изменена',
+#                          reply_markup=kb.member_menu_kb)
+#         await member_reset(state)
+#
+#     except ValueError:
+#         await msg.answer('Неверный формат ввода. Попробуйте еще раз.')
+#
+#
+# @dp.message_handler(state=EditReport.list_of_done_tasks)
+# async def edit_list_of_done_tasks(msg: Message, state: FSMContext):
+#     data = await state.get_data()
+#     done_tasks_list = data['done_tasks_list']
+#     done_tasks_list.append(msg.text)
+#     await state.update_data(done_tasks_list=done_tasks_list)
+#     append_text = '\n'.join(['- ' + task for task in data['done_tasks_list']])
+#     await bot.edit_message_text(text=f"✅ Введите список выполненных сегодня задач (по одной):\n\n"
+#                                      f"{append_text}",
+#                                 chat_id=msg.from_id,
+#                                 message_id=data['message_id'],
+#                                 reply_markup=kb.apply_tasks_kb())
+#
+#
+# @dp.callback_query_handler(text='apply_tasks', state=EditReport.list_of_done_tasks)
+# async def apply_edition_done_tasks(cb: CallbackQuery, state: FSMContext):
+#     await cb.message.delete()
+#     data = await state.get_data()
+#     done_tasks = '\n'.join(data['done_tasks_list'])
+#     report_id = data['rep'][0]
+#     await sqlite_db.update_report_done_tasks(report_id, done_tasks)
+#
+#     await update_report_message(report_id)
+#
+#     await cb.message.answer('Выполненные задания успешно изменены',
+#                             reply_markup=kb.member_menu_kb)
+#     await member_reset(state)
+#
+#
+# @dp.message_handler(state=EditReport.list_of_not_done_tasks)
+# async def edit_list_of_not_done_tasks(msg: Message, state: FSMContext):
+#     data = await state.get_data()
+#     not_done_tasks_list = data['not_done_tasks_list']
+#     not_done_tasks_list.append(msg.text)
+#     await state.update_data(not_done_tasks_list=not_done_tasks_list)
+#     append_text = '\n'.join(['- ' + task for task in data['not_done_tasks_list']])
+#     await bot.edit_message_text(text=f"❌ Введите список не выполненных сегодня задач (по одной):\n\n"
+#                                      f"{append_text}",
+#                                 chat_id=msg.from_id,
+#                                 message_id=data['message_id'],
+#                                 reply_markup=kb.apply_tasks_kb())
+#
+#
+# @dp.callback_query_handler(text='apply_tasks', state=EditReport.list_of_not_done_tasks)
+# async def apply_edition_not_done_tasks(cb: CallbackQuery, state: FSMContext):
+#     await cb.message.delete()
+#     data = await state.get_data()
+#     not_done_tasks = '\n'.join(data['not_done_tasks_list'])
+#     report_id = data['rep'][0]
+#     await sqlite_db.update_report_not_done_tasks(report_id, not_done_tasks)
+#
+#     await update_report_message(report_id)
+#
+#     await cb.message.answer('<b>Не выполненные задания</b> успешно изменены',
+#                             reply_markup=kb.member_menu_kb)
+#     await member_reset(state)
+#
+#
+# @dp.message_handler(state=EditReport.list_of_scheduled_tasks)
+# async def edit_list_of_scheduled_tasks(msg: Message, state: FSMContext):
+#     data = await state.get_data()
+#     scheduled_tasks = data['scheduled_tasks_list']
+#     scheduled_tasks.append(msg.text)
+#     await state.update_data(scheduled_tasks_list=scheduled_tasks)
+#     append_text = '\n'.join(['- ' + task for task in data['scheduled_tasks_list']])
+#     await bot.edit_message_text(text=f"📝 Введите список запланированных на завтра задач (по одной):\n\n"
+#                                      f"{append_text}",
+#                                 chat_id=msg.from_id,
+#                                 message_id=data['message_id'],
+#                                 reply_markup=kb.apply_tasks_kb())
+#
+#
+# @dp.callback_query_handler(text='apply_tasks', state=EditReport.list_of_scheduled_tasks)
+# async def apply_edition_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
+#     await cb.message.delete()
+#     data = await state.get_data()
+#     scheduled_tasks = '\n'.join(data['scheduled_tasks_list'])
+#     report_id = data['rep'][0]
+#     await sqlite_db.update_report_scheduled_tasks(report_id, scheduled_tasks)
+#
+#     await update_report_message(report_id)
+#
+#     await cb.message.answer('<b>Запланированные задания</b> успешно изменены',
+#                             reply_markup=kb.member_menu_kb)
+#     await member_reset(state)
 
 
 @dp.message_handler(text='✅ Закрытые цели', state=SessionRole.member)

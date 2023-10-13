@@ -1,11 +1,11 @@
 from aiogram.dispatcher import FSMContext
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
 from aiogram.utils.exceptions import ChatNotFound
 from aiogram.utils.markdown import hlink
 from data.config import PASS
 from dispatcher import dp
 from keyboards.keyboards import permission_denied_message
-from states import SessionRole, MemberRegistration
+from states import SessionRole
 from utils.utils import is_admin, get_status_icon
 from handlers.admin import admin_start
 from handlers.member import member_start
@@ -25,35 +25,21 @@ async def is_user_joined_all_chats(user_id: int):
 
 
 async def send_permission_denied_message(msg: Message):
-    await msg.answer(permission_denied_message)
+    await msg.answer(permission_denied_message, reply_markup=kb.check_subscribes_kb)
 
 
-@dp.message_handler(state=MemberRegistration.name)
-async def reg_listen_member_name(msg: Message, state: FSMContext):
-    await delete_prev_message(msg.from_id, state)
-    m = await msg.answer('Введите вашу фамилию:',
-                         reply_markup=kb.prev_step_reply_kb)
-    await state.update_data(name=msg.text, msg=m)
-    await MemberRegistration.surname.set()
-
-
-@dp.message_handler(state=MemberRegistration.surname)
-async def reg_listen_member_surname(msg: Message, state: FSMContext):
-    await delete_prev_message(msg.from_id, state)
-    data = await state.get_data()
-    name = data['name']
-    surname = msg.text
-    await sqlite_db.add_member(telegram_id=msg.from_id,
-                               username=msg.from_user.username,
-                               first_name=name,
-                               surname=surname)
-    await msg.answer('Вы успешно зарегистрировались!')
-    await start(msg, state)
+@dp.message_handler(text='Проверить подписки', state='*')
+async def check_subscribes(msg: Message, state: FSMContext):
+    if await is_user_joined_all_chats(msg.from_id):
+        await start(msg, state)
+    else:
+        await send_permission_denied_message(msg)
+    await msg.delete()
 
 
 @dp.message_handler(commands=['start'], state='*')
 async def start(msg: Message, state: FSMContext):
-    await state.finish()
+    await state.reset_state()
     try:
         if await is_user_joined_all_chats(msg.from_id):
             if await sqlite_db.user_exists(msg.from_id):

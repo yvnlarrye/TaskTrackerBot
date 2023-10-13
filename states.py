@@ -7,11 +7,6 @@ class SessionRole(StatesGroup):
     general = State()
 
 
-class MemberRegistration(StatesGroup):
-    name = State()
-    surname = State()
-
-
 class UserEdition(StatesGroup):
     edit_status = State()
     new_admin_name = State()

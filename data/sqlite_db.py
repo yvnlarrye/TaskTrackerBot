@@ -45,11 +45,18 @@ def create_tables():
         'id              INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE, '
         'author_id       INTEGER REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL, '
         'earned          INTEGER NOT NULL DEFAULT (0), '
-        'done_tasks      TEXT    NOT NULL, '
-        'not_done_tasks  TEXT    NOT NULL, '
+        'done_tasks      TEXT, '
+        'not_done_tasks  TEXT, '
         'scheduled_tasks TEXT    NOT NULL, '
         'message_id      INTEGER UNIQUE'
         ')'
+    )
+
+    cur.execute(
+        'CREATE TABLE IF NOT EXISTS scheduled_tasks ('
+        'id          INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,'
+        'user_id     INTEGER REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,'
+        'description TEXT    NOT NULL)'
     )
 
 
@@ -226,11 +233,18 @@ async def get_user_requests(author_id: int):
     return result.fetchall()
 
 
-async def add_report(author_id, earned, done_tasks, not_done_tasks, scheduled_tasks):
-    cur.execute(
-        "INSERT INTO reports (author_id, earned, done_tasks, not_done_tasks, scheduled_tasks) "
-        "values (?, ?, ?, ?, ?)", (author_id, earned, done_tasks, not_done_tasks, scheduled_tasks,)
-    )
+async def add_report(author_id: int, earned: str, scheduled_tasks: str,
+                     done_tasks: str = None, not_done_tasks: str = None):
+    if done_tasks is None and not_done_tasks is None:
+        cur.execute(
+            "INSERT INTO reports (author_id, earned, scheduled_tasks) "
+            "values (?, ?, ?)", (author_id, earned, scheduled_tasks,)
+        )
+    else:
+        cur.execute(
+            "INSERT INTO reports (author_id, earned, done_tasks, not_done_tasks, scheduled_tasks) "
+            "values (?, ?, ?, ?, ?)", (author_id, earned, done_tasks, not_done_tasks, scheduled_tasks,)
+        )
     db.commit()
 
 
@@ -334,4 +348,25 @@ async def get_user_status_by_id(user_id: int):
         "SELECT status FROM users WHERE id = ?", (user_id,)
     )
     return result.fetchone()[0]
+
+
+async def get_user_scheduled_tasks(user_id: int):
+    result = cur.execute(
+        "SELECT * FROM scheduled_tasks WHERE user_id = ?", (user_id,)
+    )
+    return result.fetchall()
+
+
+async def add_scheduled_task(user_id: int, description: str):
+    cur.execute(
+        "INSERT INTO scheduled_tasks (user_id, description) VALUES (?, ?)", (user_id, description,)
+    )
+    db.commit()
+
+
+async def remove_scheduled_task_by_id(task_id: int):
+    """Removes request by passed id"""
+    cur.execute("DELETE FROM scheduled_tasks WHERE id = ?",
+                (task_id,))
+    return db.commit()
 
