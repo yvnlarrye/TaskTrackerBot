@@ -5,7 +5,7 @@ from aiogram.types import (
 
 from utils.utils import formatted_users_list, __toggle_btn, __toggle_main_recipients_btn
 from utils.request import request_status_str
-from data.config import STATUS
+from data.config import STATUS, CONFIG
 from aiogram.utils.markdown import hlink
 
 intro_admin_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
@@ -171,35 +171,28 @@ def __list_of_elements_kb(elements: list):
     buttons_list = []
     for i, elm in enumerate(elements):
         buttons_list.append([InlineKeyboardButton(text=elm, callback_data=f'elm_{i}')])
+    buttons_list.append([InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')])
     return InlineKeyboardMarkup(inline_keyboard=buttons_list)
 
 
 async def users_requests_kb(requests: list):
     requests_ids = [f'Запрос #{req[0]} {request_status_str(req[2])[0]}' for req in requests]
-    return __list_of_elements_kb(requests_ids).add(
-        InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
-    )
+    return __list_of_elements_kb(requests_ids)
 
 
 async def request_headers_kb():
     headers = ['Статус', 'От кого', 'Кому', 'Запрос', 'Срок']
-    return __list_of_elements_kb(headers).add(
-        InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
-    )
+    return __list_of_elements_kb(headers)
 
 
 async def request_status_kb():
     statuses = ['❌ — Не выполнено', '🔄 — В процессе', '✅ — Выполнено']
-    return __list_of_elements_kb(statuses).add(
-        InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
-    )
+    return __list_of_elements_kb(statuses)
 
 
 async def user_status_kb():
     statuses = [f"{STATUS[key]['icon']} - {STATUS[key]['value']}" for key in STATUS.keys()]
-    return __list_of_elements_kb(statuses).add(
-        InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
-    )
+    return __list_of_elements_kb(statuses)
 
 
 def apply_tasks_kb():
@@ -212,9 +205,7 @@ def apply_tasks_kb():
 
 async def member_reports_kb(reports: list):
     reports_ids = [f'Отчёт #{req[0]}' for req in reports]
-    return __list_of_elements_kb(reports_ids).add(
-        InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
-    )
+    return __list_of_elements_kb(reports_ids)
 
 
 async def report_headers_kb():
@@ -224,9 +215,7 @@ async def report_headers_kb():
         'Невыполненные задачи ❌',
         'Запланированные задачи 📝'
     ]
-    return __list_of_elements_kb(headers).add(
-        InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
-    )
+    return __list_of_elements_kb(headers)
 
 permission_denied_message = f'Привет! Рад, что ты теперь с нами!\n\n' \
                             f'Это закрытое сообщество <b>«Нельзя, Но Можно»</b> и здесь ты точно достигнешь всех своих целей! 🚀\n\n' \
@@ -244,3 +233,38 @@ permission_denied_message = f'Привет! Рад, что ты теперь с 
                             f'👩‍🎓 {hlink("Обучение", "https://t.me/+YZv-tXBlNOU1Y2Qy")} — здесь участники обмениваются обучающими материалами\n' \
                             f'🗞 {hlink("Новости", "https://t.me/+gUyHoRf1yZE3MGJi")} — тут публикуется все нововведения и важные новости'
 
+
+check_subscribes_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
+    KeyboardButton(text='Проверить подписки')
+)
+
+
+def scheduled_tasks_kb(tasks: list, marked_tasks_indices: list = None):
+    buttons_list = []
+
+    formatted_tasks = [tasks[i][2] for i in range(len(tasks))]
+
+    for i in range(len(formatted_tasks)):
+        if marked_tasks_indices and i in marked_tasks_indices:
+            formatted_tasks[i] += '🔴'
+        buttons_list.append([InlineKeyboardButton(text=formatted_tasks[i], callback_data=f'task_{i}')])
+    buttons_list.append([InlineKeyboardButton(text='Далее⏩', callback_data='next_step')])
+    buttons_list.append([InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')])
+    return InlineKeyboardMarkup(inline_keyboard=buttons_list)
+
+
+def hashtag_kb(marked_indices: list = None, cols: int = 2):
+    buttons_list = []
+    button_row = []
+    hashtag_names = [hashtag['name'] for hashtag in CONFIG['hashtags']]
+
+    for i in range(len(hashtag_names)):
+        if marked_indices and i in marked_indices:
+            hashtag_names[i] += '🔴'
+        button_row.append([InlineKeyboardButton(text=hashtag_names[i], callback_data=f'task_{i}')])
+        if (i != 0 and i % (cols - 1) == 0) or i == len(hashtag_names) - 1:
+            buttons_list.append(button_row)
+            button_row = []
+    buttons_list.append([InlineKeyboardButton(text='✅ Подтвердить', callback_data='confirm_request')])
+    buttons_list.append([InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')])
+    return InlineKeyboardMarkup(inline_keyboard=buttons_list)

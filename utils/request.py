@@ -98,7 +98,7 @@ async def commit_request(data: dict):
 
 
 def print_request(request_id: int, status: int, addressers: list, main_recipient: tuple,
-                  secondary_recipient: tuple, text: str, date: str, video_link=None):
+                  secondary_recipient: tuple, text: str, date: str, video_link=None, hashtag_indices: list = None):
     addr_output = '\n'.join([
         f"{get_status_icon(addresser[3])} {hlink(f'{addresser[1]} {addresser[2]}', f'https://t.me/{addresser[0]}')} — {addresser[3]}"
         for addresser in addressers
@@ -114,8 +114,13 @@ def print_request(request_id: int, status: int, addressers: list, main_recipient
         secondary_recipient_output = ''
 
     video_link_output = ''
-    if video_link is not None:
+    if video_link:
         video_link_output = '\n\n' + hlink('Запись с Zoom', video_link)
+
+    hashtags_output = ''
+    if hashtag_indices:
+        hashtags = CONFIG['hashtags']
+        hashtags_output = '\n\n<b>Теги:</b>\n' + ' '.join([tag['name'] for tag in hashtags])
 
     result = f"Запрос #{request_id}\n\n" \
              f"<b>Статус:</b>\n" \
@@ -133,7 +138,8 @@ def print_request(request_id: int, status: int, addressers: list, main_recipient
              f"{text}\n" \
              f"\n" \
              f"<b>Срок:</b> {date}" \
-             f"{video_link_output}"
+             f"{video_link_output}" \
+             f"{hashtags_output}"
     return result
 
 
@@ -148,7 +154,7 @@ def request_status_str(request_status: int):
         raise AttributeError
 
 
-async def update_request_message(request_id, video_link=None):
+async def update_request_message(request_id, video_link=None, hashtag_indices: list = None):
     curr_request = await sqlite_db.get_request_by_id(request_id)
     req_status = request_status_str(curr_request[2])
     addressers = curr_request[3].split('\n')
@@ -177,11 +183,18 @@ async def update_request_message(request_id, video_link=None):
     date = curr_request[7]
     message_id = curr_request[8]
     new_output = print_request(request_id, req_status, addressers_transfer_data, main_recipient_transfer_data,
-                               secondary_recipient_transfer_data, text, date, video_link)
+                               secondary_recipient_transfer_data, text, date, video_link, hashtag_indices)
     try:
         await bot.edit_message_text(text=new_output, chat_id=CONFIG['channels']['request_channel'], message_id=message_id)
     except MessageNotModified:
         pass
+
+    hashtags = CONFIG['hashtags']
+    for i in hashtag_indices:
+        curr_tag_thread_id = hashtags[i]['thread_id']
+        await bot.send_message(chat_id=CONFIG['channels']['knowledge_base'],
+                               text=new_output,
+                               reply_to_message_id=curr_tag_thread_id)
 
 
 async def update_req_recipients_points(req, update_mode: str):

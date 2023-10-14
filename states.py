@@ -29,6 +29,7 @@ class CreateRequest(StatesGroup):
 
 
 class EditRequest(StatesGroup):
+    add_hashtags = State()
     ask_confirm_removing = State()
     remove = State()
     time = State()
