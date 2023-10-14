@@ -9,11 +9,12 @@ async def db_connect() -> None:
     db_name = str(os.getenv('database_mame'))
     db = sqlite3.connect(db_name)
     cur = db.cursor()
-    create_tables()
+
+    create_schema()
     db.commit()
 
 
-def create_tables():
+def create_users_table():
     cur.execute(
         "CREATE TABLE IF NOT EXISTS users ("
         "id          INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL, "
@@ -26,6 +27,9 @@ def create_tables():
         "status      TEXT    DEFAULT White NOT NULL"
         ")"
     )
+
+
+def create_requests_table():
     cur.execute(
         'CREATE TABLE IF NOT EXISTS requests ('
         'id                   INTEGER  PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,'
@@ -40,6 +44,8 @@ def create_tables():
         ')'
     )
 
+
+def create_reports_table():
     cur.execute(
         'CREATE TABLE IF NOT EXISTS reports ('
         'id              INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE, '
@@ -48,16 +54,53 @@ def create_tables():
         'done_tasks      TEXT, '
         'not_done_tasks  TEXT, '
         'scheduled_tasks TEXT    NOT NULL, '
-        'message_id      INTEGER UNIQUE'
+        'message_id      INTEGER UNIQUE, '
+        'date            TEXT    DEFAULT (date("now") ) NOT NULL'
         ')'
     )
 
+
+def create_scheduled_tasks_table():
     cur.execute(
         'CREATE TABLE IF NOT EXISTS scheduled_tasks ('
         'id          INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,'
         'user_id     INTEGER REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,'
         'description TEXT    NOT NULL)'
     )
+
+
+def create_goals_table():
+    cur.execute(
+        'CREATE TABLE IF NOT EXISTS goals ('
+        'id           INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL, '
+        'author_id    INTEGER REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL, '
+        'notion_link  TEXT    NOT NULL, '
+        'check_amount INTEGER NOT NULL, '
+        'comment      TEXT    NOT NULL, '
+        'date         TEXT    DEFAULT (date("now") ) NOT NULL'
+        ')'
+    )
+
+
+def create_points_table():
+    cur.execute(
+        'CREATE TABLE IF NOT EXISTS points ('
+        'id      INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE, '
+        'user_id INTEGER REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL, '
+        'amount  REAL NOT NULL, '
+        'date    TEXT    DEFAULT (date("now") )  NOT NULL'
+        ')'
+    )
+
+
+def create_schema():
+    create_users_table()
+    create_requests_table()
+    create_reports_table()
+    create_scheduled_tasks_table()
+    create_goals_table()
+    create_points_table()
+    db.commit()
 
 
 async def get_user_id(telegram_id: int) -> int:
@@ -370,3 +413,86 @@ async def remove_scheduled_task_by_id(task_id: int):
                 (task_id,))
     return db.commit()
 
+
+async def add_goal(author_id: int, notion_link: str, check_amount: int, comment: str):
+    cur.execute(
+        "INSERT INTO goals (author_id, notion_link, check_amount, comment)"
+        "VALUES (?, ?, ?, ?)", (author_id, notion_link, check_amount, comment)
+    )
+    db.commit()
+
+
+async def get_user_check_amounts_per_day(user_id: int):
+    result = cur.execute(
+        "SELECT check_amount FROM goals WHERE author_id = ? AND date = date('now')", (user_id,)
+    )
+    return result.fetchall()
+
+
+async def get_user_earned_per_day(user_id: int):
+    result = cur.execute(
+        "SELECT earned FROM reports WHERE author_id = ? AND date = date('now')", (user_id,)
+    )
+    return result.fetchall()
+
+
+async def add_points_to_user(user_id: int, amount: float):
+    cur.execute(
+        "INSERT INTO points (user_id, amount) VALUES (?, ?)", (user_id, amount)
+    )
+    db.commit()
+
+
+async def get_user_points_per_day(user_id: int):
+    result = cur.execute(
+        "SELECT amount FROM points WHERE user_id = ? AND date = date('now')", (user_id,)
+    )
+    return result.fetchall()
+
+
+async def get_user_check_amounts_per_week(user_id: int):
+    result = cur.execute(
+        "SELECT check_amount FROM goals "
+        "WHERE (author_id = ?) AND (date BETWEEN date('now', '-6 days') AND date('now'))", (user_id,)
+    )
+    return result.fetchall()
+
+
+async def get_user_earned_per_week(user_id: int):
+    result = cur.execute(
+        "SELECT earned FROM reports "
+        "WHERE (author_id = ?) AND (date BETWEEN date('now', '-6 days') AND date('now'))", (user_id,)
+    )
+    return result.fetchall()
+
+
+async def get_user_points_per_week(user_id: int):
+    result = cur.execute(
+        "SELECT amount FROM points "
+        "WHERE (user_id = ?) AND (date BETWEEN date('now', '-6 days') AND date('now'))", (user_id,)
+    )
+    return result.fetchall()
+
+
+async def get_user_check_amounts_per_month(user_id: int):
+    result = cur.execute(
+        "SELECT check_amount FROM goals "
+        "WHERE (author_id = ?) AND (date BETWEEN date(date('now', '-1 month'), '+1 day') AND date('now'))", (user_id,)
+    )
+    return result.fetchall()
+
+
+async def get_user_earned_per_month(user_id: int):
+    result = cur.execute(
+        "SELECT earned FROM reports "
+        "WHERE (author_id = ?) AND (date BETWEEN date(date('now', '-1 month'), '+1 day') AND date('now'))", (user_id,)
+    )
+    return result.fetchall()
+
+
+async def get_user_points_per_month(user_id: int):
+    result = cur.execute(
+        "SELECT amount FROM points "
+        "WHERE (user_id = ?) AND (date BETWEEN date(date('now', '-1 month'), '+1 day') AND date('now'))", (user_id,)
+    )
+    return result.fetchall()

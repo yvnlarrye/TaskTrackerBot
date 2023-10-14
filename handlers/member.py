@@ -343,6 +343,8 @@ async def finish_status_edition(cb: CallbackQuery, state: FSMContext):
         hashtag_indices = data['hashtag_indices']
         await update_request_message(data['request_id'], data['video_shared_link'], hashtag_indices)
         await sqlite_db.update_request_status(data['request_id'], 2)
+        await update_req_recipients_points(data['req'], '+')
+
         await cb.message.answer('Статус запроса успешно обновлён ✅',
                                 reply_markup=kb.member_menu_kb)
         await cb.message.delete()
@@ -815,6 +817,8 @@ async def listening_comment(msg: Message, state: FSMContext):
         await bot.send_video(chat_id=CONFIG['channels']['goals_channel'],
                              video=data['file_video'],
                              caption=caption)
+    user_id = await sqlite_db.get_user_id(msg.from_id)
+    await sqlite_db.add_goal(user_id, data['notion_link'], int(data['check_amount']), msg.text)
 
     m = await msg.answer('Отчёт о выполненной цели добавлен ✅',
                          reply_markup=kb.member_menu_kb)

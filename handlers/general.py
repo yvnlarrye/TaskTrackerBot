@@ -6,6 +6,7 @@ from data.config import PASS
 from dispatcher import dp
 from keyboards.keyboards import permission_denied_message
 from states import SessionRole
+from utils.period_reports import *
 from utils.utils import is_admin, get_status_icon
 from handlers.admin import admin_start
 from handlers.member import member_start
@@ -14,6 +15,21 @@ from keyboards import keyboards as kb
 from utils.utils import delete_prev_message, get_user_earned_total_amount
 from dispatcher import bot
 from data.config import CONFIG
+
+#
+# @dp.message_handler(text='TEST_DAILY', state='*')
+# async def test_daily(msg: Message):
+#     await send_daily_report()
+#
+#
+# @dp.message_handler(text='TEST_WEEKLY', state='*')
+# async def test_daily(msg: Message):
+#     await send_weekly_report()
+#
+#
+# @dp.message_handler(text='TEST_MONTHLY', state='*')
+# async def test_daily(msg: Message):
+#     await send_monthly_report()
 
 
 async def is_user_joined_all_chats(user_id: int):
@@ -24,39 +40,56 @@ async def is_user_joined_all_chats(user_id: int):
     return True
 
 
-async def send_permission_denied_message(msg: Message):
-    await msg.answer(permission_denied_message, reply_markup=kb.check_subscribes_kb)
+async def send_permission_denied_message(to_user_id: int):
+    await bot.send_message(chat_id=to_user_id,
+                           text=permission_denied_message,
+                           reply_markup=kb.check_subscribes_kb)
 
 
-@dp.message_handler(text='Проверить подписки', state='*')
-async def check_subscribes(msg: Message, state: FSMContext):
-    if await is_user_joined_all_chats(msg.from_id):
-        await start(msg, state)
+@dp.callback_query_handler(text='check_subscribes', state='*')
+async def check_subscribes(cb: CallbackQuery):
+    await cb.message.delete()
+    if await is_user_joined_all_chats(cb.from_user.id):
+        await cb.message.answer(
+            f'Объедини все каналы в одну папку. Как это сделать?  — \n<b>{hlink("Смотреть видео", "https://drive.google.com/file/d/1kyGfO5XPBReBcARjKgBGZK9lnOHOTQaD/view?usp=drive_link")}</b>.',
+            reply_markup=kb.seen_video_kb
+        )
     else:
-        await send_permission_denied_message(msg)
-    await msg.delete()
+        await send_permission_denied_message(to_user_id=cb.from_user.id)
+
+
+@dp.callback_query_handler(text='seen_video', state='*')
+async def seen_video(cb: CallbackQuery, state: FSMContext):
+    await access_layer(cb.from_user.id, state)
+    await cb.message.delete()
+
+
+async def access_layer(user_id: int, state: FSMContext):
+    try:
+        if await is_user_joined_all_chats(user_id):
+            if await sqlite_db.user_exists(user_id):
+                if await is_admin(user_id):
+                    keyboard = kb.intro_admin_kb
+                else:
+                    keyboard = kb.intro_member_kb
+                m = await bot.send_message(chat_id=user_id,
+                                           text='Выбери, за кого зайти:',
+                                           reply_markup=keyboard)
+                await state.update_data(msg=m)
+            else:
+                await bot.send_message(chat_id=user_id,
+                                       text='🚫 У вас нет доступа к боту. Свяжитесь с администратором.')
+        else:
+            await send_permission_denied_message(to_user_id=user_id)
+    except ChatNotFound:
+        await bot.send_message(chat_id=user_id,
+                               text='Для корректной работы добавьте бота во все подключенные чаты.')
 
 
 @dp.message_handler(commands=['start'], state='*')
 async def start(msg: Message, state: FSMContext):
     await state.reset_state()
-    try:
-        if await is_user_joined_all_chats(msg.from_id):
-            if await sqlite_db.user_exists(msg.from_id):
-                if await is_admin(msg.from_id):
-                    keyboard = kb.intro_admin_kb
-                else:
-                    keyboard = kb.intro_member_kb
-                m = await msg.answer('Выбери, за кого зайти:',
-                                     reply_markup=keyboard)
-                await state.update_data(msg=m)
-            else:
-                await msg.answer('🚫 У вас нет доступа к боту. Свяжитесь с администратором.')
-        else:
-            await send_permission_denied_message(msg)
-    except ChatNotFound:
-        await bot.send_message(chat_id=msg.from_id,
-                               text='Для корректной работы добавьте бота во все подключенные чаты.')
+    await access_layer(msg.from_id, state)
     await msg.delete()
 
 
@@ -71,7 +104,7 @@ async def logout(msg: Message, state: FSMContext):
         else:
             await msg.answer('Команда доступна только администраторам.')
     else:
-        await send_permission_denied_message(msg)
+        await send_permission_denied_message(to_user_id=msg.from_id)
 
 
 @dp.message_handler(commands=['admin'], state='*')
@@ -86,7 +119,7 @@ async def admin(msg: Message, state: FSMContext):
                     await msg.answer('Новый администратор добавлен')
                     await start(msg, state)
     else:
-        await send_permission_denied_message(msg)
+        await send_permission_denied_message(to_user_id=msg.from_id)
 
 
 @dp.message_handler(text='👨‍💻 Участник')
@@ -96,7 +129,7 @@ async def login_as_member(msg: Message, state: FSMContext):
         if await sqlite_db.user_exists(msg.from_id):
             await member_start(msg, state)
     else:
-        await send_permission_denied_message(msg)
+        await send_permission_denied_message(to_user_id=msg.from_id)
     await msg.delete()
 
 
@@ -112,7 +145,7 @@ async def login_as_admin(msg: Message, state: FSMContext):
         else:
             await msg.answer('🚫 У вас нет доступа к боту. Свяжитесь с администратором.')
     else:
-        await send_permission_denied_message(msg)
+        await send_permission_denied_message(to_user_id=msg.from_id)
     await msg.delete()
 
 
@@ -122,7 +155,7 @@ async def back_to_main_menu(msg: Message, state: FSMContext):
     if await is_user_joined_all_chats(msg.from_id):
         await start(msg, state)
     else:
-        await send_permission_denied_message(msg)
+        await send_permission_denied_message(to_user_id=msg.from_id)
 
 
 @dp.message_handler(text='🏆📈 Топы', state='*')
@@ -148,7 +181,7 @@ async def week_rating(msg: Message, state: FSMContext):
                          reply_markup=kb.prev_step_reply_kb)
         await SessionRole.general.set()
     else:
-        await send_permission_denied_message(msg)
+        await send_permission_denied_message(to_user_id=msg.from_id)
 
 
 @dp.message_handler(text='↩️ Вернуться назад', state=SessionRole.general)
@@ -156,4 +189,4 @@ async def back_to_admin_menu(msg: Message, state: FSMContext):
     if await is_user_joined_all_chats(msg.from_id):
         await start(msg, state)
     else:
-        await send_permission_denied_message(msg)
+        await send_permission_denied_message(to_user_id=msg.from_id)

@@ -4,13 +4,8 @@
         "request_channel": -1001816031562,
         "goals_channel": -1001870833490,
         "general": -1001534514369,
-        "daily_reports": -1001976036287,
-        "weekly_reports": -1001897848608,
-        "monthly_reports": -1001964041553,
-        "knowledge_base": -1001816334457,
-        "tables": -1001970518348,
-        "learning": -1001962418832,
-        "news": -1001962331016
+        "period_reports": -1001960402798,
+        "knowledge_base": -1001816334457
     },
     "request_status": {
         "not_done": "❌ — Не выполнено",
@@ -40,7 +35,7 @@
             "icon": "👑"
         }
     },
-    "video_folder_id": "1rjWgY6VE4Cd8152uDpREdITq4SP48Qk8",
+    "video_folder_id": "1DVg1AQNT1c1a9WA0swB4nLRoWz1ta1Vs",
     "hashtags": [
         {
             "name": "#Продажи",
@@ -74,5 +69,16 @@
             "name": "#МоральноеСостояние",
             "thread_id": 16
         }
-    ]
+    ],
+    "period_reports": {
+        "daily": {
+            "thread_id": 1
+        },
+        "weekly": {
+            "thread_id": 3
+        },
+        "monthly": {
+            "thread_id": 5
+        }
+    }
 }

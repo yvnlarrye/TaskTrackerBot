@@ -12,8 +12,14 @@ intro_admin_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     KeyboardButton('👨‍💻 Участник'),
     KeyboardButton('🏴‍☠️ Админ')
 ).add(
-    KeyboardButton('🏆📈 Топы'),
+    KeyboardButton('🏆📈 Топы')
 )
+
+# .add(
+#     KeyboardButton('TEST_DAILY'),
+#     KeyboardButton('TEST_WEEKLY'),
+#     KeyboardButton('TEST_MONTHLY'),
+# )
 
 intro_member_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     KeyboardButton('👨‍💻 Участник')
@@ -222,20 +228,15 @@ permission_denied_message = f'Привет! Рад, что ты теперь с 
                             f'Для того, чтобы состоять в нашем сообществе, тебе необходимо подписаться на следующие каналы и чаты:\n\n' \
                             f'🤖 {hlink("Бот-ассистент", "https://t.me/nobutyesteam_bot")} — он поможет тебе заполнить ежедневную отчетность, оставить запрос другим участникам, закрывать цели, следить за статистикой своей и других участников\n' \
                             f'💬 {hlink("Общий чат", "https://t.me/+vQAPN0gIeWU1M2Uy")} — для ежедневного общения с участниками\n' \
-                            f'📝 {hlink("Отчеты", "https://t.me/+bHfggUwLTfQzZTUy")} — здесь отображаются ваши задачи за прошедший день и на следующий\n' \
-                            f'📝 {hlink("Ежедневные отчеты", "https://t.me/+OWjK-vV1yA5hN2Ni")} — статистика участников за день\n' \
-                            f'📝 {hlink("Еженедельные отчеты", "https://t.me/+_YWZ37aOe-lhNTgy")} — статистика участников за неделю\n' \
-                            f'📝 {hlink("Ежемесячные отчеты", "https://t.me/+CWjaimiv_X4yYTY6")} — статистика участников за месяц\n' \
+                            f'📝 {hlink("Ежедневные задачи", "https://t.me/+bHfggUwLTfQzZTUy")} — здесь отображаются ваши задачи за прошедший день и на следующий\n' \
+                            f'📝 {hlink("Отчеты", "https://t.me/+_fm9utI7EW82OWJi")} — статистика участников за день/неделю/месяц\n' \
                             f'🎯 {hlink("Закрытые цели", "https://t.me/+IOhfgXR3dcEzODli")} — здесь публикуются все закрытые цели участников\n' \
-                            f'⚙️ {hlink("База запросов", "https://t.me/+dei2b--LBsJhMmIy")} — тут можешь найти ответ на свой запрос, если его нет, то создавай новый\n' \
-                            f'📝 {hlink("Запросы", "https://t.me/+SgHj8E-IpHMxZWUy")} — оставляй любой запрос участникам сообщества\n' \
-                            f'📊 {hlink("Таблицы", "https://t.me/+gOBRBqEF73phNDEy")} — здесь ты найдешь все таблицы, которые используются участниками сообщества для оптимизации работы\n' \
-                            f'👩‍🎓 {hlink("Обучение", "https://t.me/+YZv-tXBlNOU1Y2Qy")} — здесь участники обмениваются обучающими материалами\n' \
-                            f'🗞 {hlink("Новости", "https://t.me/+gUyHoRf1yZE3MGJi")} — тут публикуется все нововведения и важные новости'
+                            f'⚙️ {hlink("База знаний", "https://t.me/+dei2b--LBsJhMmIy")} — тут можешь найти разработанные для инфобиза таблицы, необходимые обучения, ответ на свой \n' \
+                            f'📝 {hlink("Запросы", "https://t.me/+SgHj8E-IpHMxZWUy")} — оставляй любой запрос участникам сообщества'
 
 
-check_subscribes_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
-    KeyboardButton(text='Проверить подписки')
+check_subscribes_kb = InlineKeyboardMarkup().add(
+   InlineKeyboardButton(text='Проверить подписки', callback_data='check_subscribes')
 )
 
 
@@ -253,7 +254,7 @@ def scheduled_tasks_kb(tasks: list, marked_tasks_indices: list = None):
     return InlineKeyboardMarkup(inline_keyboard=buttons_list)
 
 
-def hashtag_kb(marked_indices: list = None, cols: int = 2):
+def hashtag_kb(marked_indices: list = None):
     buttons_list = []
     button_row = []
     hashtag_names = [hashtag['name'] for hashtag in CONFIG['hashtags']]
@@ -268,3 +269,8 @@ def hashtag_kb(marked_indices: list = None, cols: int = 2):
     buttons_list.append([InlineKeyboardButton(text='✅ Подтвердить', callback_data='next_step')])
     buttons_list.append([InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')])
     return InlineKeyboardMarkup(inline_keyboard=buttons_list)
+
+
+seen_video_kb = InlineKeyboardMarkup().add(
+    InlineKeyboardButton(text='Я посмотрел видео', callback_data='seen_video')
+)

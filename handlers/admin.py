@@ -244,6 +244,9 @@ async def listening_points_amount_to_add(msg: Message, state: FSMContext):
             user_id = curr_users[i][0]
             user_points = await sqlite_db.get_user_points(user_id)
             user_points += points_amount
+
+            await sqlite_db.add_points_to_user(user_id, points_amount)
+
             await sqlite_db.update_user_points(user_id, user_points)
             if j == len(selected_users_indices) - 1:
                 await msg.answer(f'<b>{points_amount}</b> баллов начислены участнику @{curr_users[i][3]}',
@@ -292,8 +295,9 @@ async def listening_points_amount_to_reduce(msg: Message, state: FSMContext):
             user_id = curr_users[i][0]
             user_points = await sqlite_db.get_user_points(user_id)
             user_points -= points_amount
-            if user_points < 0:
-                user_points = 0
+
+            await sqlite_db.add_points_to_user(user_id, -1 * points_amount)
+
             await sqlite_db.update_user_points(user_id, user_points)
             if j == len(selected_users_indices) - 1:
                 await msg.answer(f'<b>{points_amount}</b> баллов вычтены у пользователя @{curr_users[i][3]}',
