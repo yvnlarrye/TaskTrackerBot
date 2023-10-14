@@ -261,10 +261,10 @@ def hashtag_kb(marked_indices: list = None, cols: int = 2):
     for i in range(len(hashtag_names)):
         if marked_indices and i in marked_indices:
             hashtag_names[i] += '🔴'
-        button_row.append([InlineKeyboardButton(text=hashtag_names[i], callback_data=f'task_{i}')])
-        if (i != 0 and i % (cols - 1) == 0) or i == len(hashtag_names) - 1:
+        button_row.append(InlineKeyboardButton(text=hashtag_names[i], callback_data=f'task_{i}'))
+        if (i % 2 != 0) or (i == len(hashtag_names) - 1):
             buttons_list.append(button_row)
             button_row = []
-    buttons_list.append([InlineKeyboardButton(text='✅ Подтвердить', callback_data='confirm_request')])
+    buttons_list.append([InlineKeyboardButton(text='✅ Подтвердить', callback_data='next_step')])
     buttons_list.append([InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')])
     return InlineKeyboardMarkup(inline_keyboard=buttons_list)

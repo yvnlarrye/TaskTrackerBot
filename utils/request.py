@@ -120,7 +120,7 @@ def print_request(request_id: int, status: int, addressers: list, main_recipient
     hashtags_output = ''
     if hashtag_indices:
         hashtags = CONFIG['hashtags']
-        hashtags_output = '\n\n<b>Теги:</b>\n' + ' '.join([tag['name'] for tag in hashtags])
+        hashtags_output = '\n\n<b>Теги:</b>\n' + ' '.join([hashtags[i]['name'] for i in hashtag_indices])
 
     result = f"Запрос #{request_id}\n\n" \
              f"<b>Статус:</b>\n" \
@@ -216,3 +216,29 @@ async def update_req_recipients_points(req, update_mode: str):
             recipient_rate = await sqlite_db.get_user_points(secondary_recipient_id)
             recipient_rate += 0.5 * sign
             await sqlite_db.update_user_points(secondary_recipient_id, recipient_rate)
+
+
+async def update_request_hashtags(cb: CallbackQuery, state: FSMContext):
+    user_index = int(cb.data[5:])
+
+    data = await state.get_data()
+    if 'hashtag_indices' not in data:
+        await state.update_data(hashtag_indices=[])
+
+    data = await state.get_data()
+    hashtag_indices = data['hashtag_indices']
+
+    if user_index in hashtag_indices:
+        hashtag_indices.remove(user_index)
+    else:
+        hashtag_indices.append(user_index)
+    await state.update_data(hashtag_indices=hashtag_indices)
+    new_keyboard = kb.hashtag_kb(hashtag_indices)
+
+    data = await state.get_data()
+    hashtag_indices = data['hashtag_indices']
+
+    await bot.edit_message_text(chat_id=cb.message.chat.id,
+                                message_id=cb.message.message_id,
+                                text=data['message_text'],
+                                reply_markup=new_keyboard)

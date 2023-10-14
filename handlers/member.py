@@ -13,11 +13,11 @@ from dispatcher import dp, bot
 from google.google_manager import upload_file_to_google_drive
 from keyboards import keyboards as kb
 from utils.reports import (
-    print_report, update_report_message, update_selected_done_tasks
+    print_report, update_selected_done_tasks
 )
 from utils.request import (
     request_to_user, request_from_user, commit_request, print_request, update_request_message,
-    update_req_recipients_points
+    update_req_recipients_points, update_request_hashtags
 )
 from utils.utils import (
     format_recipients, format_addressers, commit_report, delete_prev_message, get_status_icon
@@ -46,7 +46,6 @@ async def member_start(msg: Message, state: FSMContext):
                                                       Goals.notion_link, Goals.comment,
                                                       EditRequest.video,
                                                       EditRequest.video])
-# @dp.message_handler(text='↩️ Вернуться назад', state='*')
 async def back_to_member_menu_kb(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     await member_start(msg, state)
@@ -56,8 +55,8 @@ async def back_to_member_menu_kb(msg: Message, state: FSMContext):
                                                     EditRequest.select_request_headers,
                                                     EditRequest.date, EditRequest.status,
                                                     EditRequest.addressers, EditRequest.recipients,
-                                                    CreateRequest.request_from, CreateRequest.request_to,
-                                                    CreateRequest.date,
+                                                    EditRequest.add_hashtags, CreateRequest.request_from,
+                                                    CreateRequest.request_to, CreateRequest.date,
                                                     CreateReport.list_of_done_tasks,
                                                     CreateReport.list_of_not_done_tasks,
                                                     CreateReport.list_of_scheduled_tasks,
@@ -67,7 +66,6 @@ async def back_to_member_menu_kb(msg: Message, state: FSMContext):
                                                     EditReport.select_report_headers,
                                                     EditReport.select_member_report
                                                     ])
-# @dp.callback_query_handler(text='prev_step', state='*')
 async def back_to_member_menu_cb(cb: CallbackQuery, state: FSMContext):
     await cb.message.delete()
     await member_start(cb.message, state)
@@ -153,12 +151,12 @@ async def listening_request_date(msg: Message, state: FSMContext):
         await state.update_data(date=date)
 
         await msg.answer('Для завершения операции нажмите кнопку "Подтвердить"',
-                                reply_markup=InlineKeyboardMarkup().add(
-                                    InlineKeyboardButton(text='✅ Подтвердить', callback_data='confirm_request')
-                                ).add(
-                                    InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
-                                )
-                                )
+                         reply_markup=InlineKeyboardMarkup().add(
+                             InlineKeyboardButton(text='✅ Подтвердить', callback_data='confirm_request')
+                         ).add(
+                             InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
+                         )
+                         )
     except AttributeError:
         await msg.answer(text='Неверный формат даты',
                          reply_markup=kb.prev_step_reply_kb)
@@ -316,7 +314,6 @@ async def listen_request_video(msg: Message, state: FSMContext):
 
         video_shared_link = upload_file_to_google_drive(user, file_name, file_path)
 
-        await sqlite_db.update_request_status(request_id, 2)
         os.remove(file_path)
 
         await m.delete()
@@ -329,34 +326,8 @@ async def listen_request_video(msg: Message, state: FSMContext):
         await EditRequest.add_hashtags.set()
         await msg.delete()
 
-        # await msg.answer('Статус запроса успешно обновлён ✅',
-        #                  reply_markup=kb.member_menu_kb)
-        # await member_reset(state)
 
-
-async def update_request_hashtags(cb: CallbackQuery, state: FSMContext):
-    user_index = int(cb.data[4:])
-
-    data = await state.get_data()
-    if 'hashtag_indices' not in data:
-        await state.update_data(hashtag_indices=[])
-
-    data = await state.get_data()
-    hashtag_indices = data['hashtag_indices']
-
-    if user_index in hashtag_indices:
-        hashtag_indices.remove(user_index)
-    else:
-        hashtag_indices.append(user_index)
-    await state.update_data(hashtag_indices=hashtag_indices)
-    new_keyboard = kb.hashtag_kb(hashtag_indices)
-    await bot.edit_message_text(chat_id=cb.message.chat.id,
-                                message_id=cb.message.message_id,
-                                text=data['message_text'],
-                                reply_markup=new_keyboard)
-
-
-@dp.callback_query_handler(Text(startswith="elm_"), state=EditRequest.add_hashtags)
+@dp.callback_query_handler(Text(startswith="task_"), state=EditRequest.add_hashtags)
 async def add_hashtags(cb: CallbackQuery, state: FSMContext):
     await update_request_hashtags(cb, state)
 
@@ -371,6 +342,11 @@ async def finish_status_edition(cb: CallbackQuery, state: FSMContext):
     else:
         hashtag_indices = data['hashtag_indices']
         await update_request_message(data['request_id'], data['video_shared_link'], hashtag_indices)
+        await sqlite_db.update_request_status(data['request_id'], 2)
+        await cb.message.answer('Статус запроса успешно обновлён ✅',
+                                reply_markup=kb.member_menu_kb)
+        await cb.message.delete()
+        await member_reset(state)
 
 
 @dp.callback_query_handler(Text(startswith='user_'), state=EditRequest.addressers)
