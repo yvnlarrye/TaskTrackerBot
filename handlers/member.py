@@ -151,13 +151,14 @@ async def listening_request_date(msg: Message, state: FSMContext):
         date = re.sub(r"[/\\-]", ".", re.search(r"(\d+.*?\d+.*?\d+)", msg.text).group(1))
         await validate_date(date, msg)
         await state.update_data(date=date)
+
         await msg.answer('Для завершения операции нажмите кнопку "Подтвердить"',
-                         reply_markup=InlineKeyboardMarkup().add(
-                             InlineKeyboardButton(text='✅ Подтвердить', callback_data='confirm_request')
-                         ).add(
-                             InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
-                         )
-                         )
+                                reply_markup=InlineKeyboardMarkup().add(
+                                    InlineKeyboardButton(text='✅ Подтвердить', callback_data='confirm_request')
+                                ).add(
+                                    InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
+                                )
+                                )
     except AttributeError:
         await msg.answer(text='Неверный формат даты',
                          reply_markup=kb.prev_step_reply_kb)
@@ -316,16 +317,60 @@ async def listen_request_video(msg: Message, state: FSMContext):
         video_shared_link = upload_file_to_google_drive(user, file_name, file_path)
 
         await sqlite_db.update_request_status(request_id, 2)
-        await update_request_message(request_id, video_shared_link)
-
         os.remove(file_path)
 
         await m.delete()
+        message_text = 'Добавьте подходящие хештеги:'
+        await state.update_data(message_text=message_text,
+                                video_shared_link=video_shared_link,
+                                request_id=request_id)
+        await msg.answer(message_text,
+                         reply_markup=kb.hashtag_kb())
+        await EditRequest.add_hashtags.set()
         await msg.delete()
 
-        await msg.answer('Статус запроса успешно обновлён ✅',
-                         reply_markup=kb.member_menu_kb)
-        await member_reset(state)
+        # await msg.answer('Статус запроса успешно обновлён ✅',
+        #                  reply_markup=kb.member_menu_kb)
+        # await member_reset(state)
+
+
+async def update_request_hashtags(cb: CallbackQuery, state: FSMContext):
+    user_index = int(cb.data[4:])
+
+    data = await state.get_data()
+    if 'hashtag_indices' not in data:
+        await state.update_data(hashtag_indices=[])
+
+    data = await state.get_data()
+    hashtag_indices = data['hashtag_indices']
+
+    if user_index in hashtag_indices:
+        hashtag_indices.remove(user_index)
+    else:
+        hashtag_indices.append(user_index)
+    await state.update_data(hashtag_indices=hashtag_indices)
+    new_keyboard = kb.hashtag_kb(hashtag_indices)
+    await bot.edit_message_text(chat_id=cb.message.chat.id,
+                                message_id=cb.message.message_id,
+                                text=data['message_text'],
+                                reply_markup=new_keyboard)
+
+
+@dp.callback_query_handler(Text(startswith="elm_"), state=EditRequest.add_hashtags)
+async def add_hashtags(cb: CallbackQuery, state: FSMContext):
+    await update_request_hashtags(cb, state)
+
+
+@dp.callback_query_handler(text='next_step', state=EditRequest.add_hashtags)
+async def finish_status_edition(cb: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    if 'hashtag_indices' not in data or not len(data['hashtag_indices']):
+        m = await cb.message.answer('Необходимо выбрать хотя бы один хештег.')
+        await asyncio.sleep(2)
+        await m.delete()
+    else:
+        hashtag_indices = data['hashtag_indices']
+        await update_request_message(data['request_id'], data['video_shared_link'], hashtag_indices)
 
 
 @dp.callback_query_handler(Text(startswith='user_'), state=EditRequest.addressers)
