@@ -4,6 +4,7 @@ from data import sqlite_db
 from dispatcher import bot
 from states import SessionRole
 from data.config import STATUS
+import datetime
 
 
 async def is_admin(telegram_id: int) -> bool:
@@ -167,6 +168,12 @@ async def get_user_earned_total_amount(user_id: int):
         earned = report[2]
         total_amount += earned
     return total_amount
+
+
+def curr_datetime():
+    offset = datetime.timedelta(hours=3)
+    tz = datetime.timezone(offset, name='МСК')
+    return datetime.datetime.now(tz=tz)
 
 
 

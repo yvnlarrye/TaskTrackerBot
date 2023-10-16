@@ -16,21 +16,6 @@ from utils.utils import delete_prev_message, get_user_earned_total_amount
 from dispatcher import bot
 from data.config import CONFIG
 
-#
-# @dp.message_handler(text='TEST_DAILY', state='*')
-# async def test_daily(msg: Message):
-#     await send_daily_report()
-#
-#
-# @dp.message_handler(text='TEST_WEEKLY', state='*')
-# async def test_daily(msg: Message):
-#     await send_weekly_report()
-#
-#
-# @dp.message_handler(text='TEST_MONTHLY', state='*')
-# async def test_daily(msg: Message):
-#     await send_monthly_report()
-
 
 async def is_user_joined_all_chats(user_id: int):
     for chat_id in CONFIG['channels'].values():
@@ -47,21 +32,12 @@ async def send_permission_denied_message(to_user_id: int):
 
 
 @dp.callback_query_handler(text='check_subscribes', state='*')
-async def check_subscribes(cb: CallbackQuery):
+async def check_subscribes(cb: CallbackQuery, state: FSMContext):
     await cb.message.delete()
     if await is_user_joined_all_chats(cb.from_user.id):
-        await cb.message.answer(
-            f'Объедини все каналы в одну папку. Как это сделать?  — \n<b>{hlink("Смотреть видео", "https://drive.google.com/file/d/1kyGfO5XPBReBcARjKgBGZK9lnOHOTQaD/view?usp=drive_link")}</b>.',
-            reply_markup=kb.seen_video_kb
-        )
+        await access_layer(cb.from_user.id, state)
     else:
         await send_permission_denied_message(to_user_id=cb.from_user.id)
-
-
-@dp.callback_query_handler(text='seen_video', state='*')
-async def seen_video(cb: CallbackQuery, state: FSMContext):
-    await access_layer(cb.from_user.id, state)
-    await cb.message.delete()
 
 
 async def access_layer(user_id: int, state: FSMContext):

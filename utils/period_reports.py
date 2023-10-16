@@ -1,10 +1,11 @@
+from datetime import timedelta
+
 from aiogram.utils.markdown import hlink
 
 from data import sqlite_db
 from data.config import CONFIG
 from dispatcher import bot
-from utils.utils import get_status_icon
-from datetime import datetime, timedelta
+from utils.utils import get_status_icon, curr_datetime
 
 
 async def send_daily_report():
@@ -29,7 +30,7 @@ async def send_daily_report():
         for points_record in points_records:
             total_points += points_record[0]
 
-        report_output = f"<b>Дата:</b> {datetime.now().strftime('%d.%m.%y')}\n\n" \
+        report_output = f"<b>Дата:</b> {curr_datetime().strftime('%d.%m.%y')}\n\n" \
                         f"{user_output}\n\n" \
                         f"💸 Заработал: {total_earned}\n" \
                         f"✅ Заработал баллов: {total_points}\n" \
@@ -63,7 +64,7 @@ async def send_weekly_report():
         for points_record in points_records:
             total_points += points_record[0]
 
-        report_output = f"<b>Даты:</b> {(datetime.now() - timedelta(days=6)).strftime('%d.%m.%y')} - {datetime.now().strftime('%d.%m.%y')}\n\n" \
+        report_output = f"<b>Даты:</b> {(curr_datetime() - timedelta(days=6)).strftime('%d.%m.%y')} - {curr_datetime().strftime('%d.%m.%y')}\n\n" \
                         f"{user_output}\n\n" \
                         f"💸 Заработал: {total_earned}\n" \
                         f"✅ Заработал баллов: {total_points}\n" \
@@ -76,8 +77,7 @@ async def send_weekly_report():
 
 
 async def send_monthly_report():
-    today = datetime.now()
-    if (today + timedelta(days=1)).month != today.month:
+    if (curr_datetime() + timedelta(days=1)).month != curr_datetime().month:
         users = await sqlite_db.get_users()
         for user in users:
             check_amount_records = await sqlite_db.get_user_check_amounts_per_month(user[0])
@@ -99,7 +99,7 @@ async def send_monthly_report():
             for points_record in points_records:
                 total_points += points_record[0]
 
-            report_output = f"<b>Месяц:</b> {datetime.today().strftime('%B, %Y')}\n\n" \
+            report_output = f"<b>Месяц:</b> {curr_datetime().strftime('%B, %Y')}\n\n" \
                             f"{user_output}\n\n" \
                             f"💸 Заработал: {total_earned}\n" \
                             f"✅ Заработал баллов: {total_points}\n" \
@@ -109,5 +109,16 @@ async def send_monthly_report():
             await bot.send_message(chat_id=CONFIG['channels']['period_reports'],
                                    reply_to_message_id=CONFIG['period_reports']['monthly']['thread_id'],
                                    text=report_output)
+
+
+async def reminder():
+    users = await sqlite_db.get_users()
+    for user in users:
+        user_id = user[0]
+        try:
+            await bot.send_message(chat_id=user_id, text='Привет! Не забудь заполнить отчёт до 22:00.')
+        except Exception:
+            pass
+
 
 

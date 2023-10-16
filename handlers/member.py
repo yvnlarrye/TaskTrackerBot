@@ -341,8 +341,8 @@ async def finish_status_edition(cb: CallbackQuery, state: FSMContext):
         await m.delete()
     else:
         hashtag_indices = data['hashtag_indices']
-        await update_request_message(data['request_id'], data['video_shared_link'], hashtag_indices)
         await sqlite_db.update_request_status(data['request_id'], 2)
+        await update_request_message(data['request_id'], data['video_shared_link'], hashtag_indices)
         await update_req_recipients_points(data['req'], '+')
 
         await cb.message.answer('Статус запроса успешно обновлён ✅',
