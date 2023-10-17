@@ -126,6 +126,13 @@ async def add_member(telegram_id: int, username: str, first_name: str, surname: 
     return db.commit()
 
 
+async def remove_user_by_id(user_id: int):
+    """Removes user by passed id"""
+    cur.execute("DELETE FROM users WHERE id = ?",
+                (user_id,))
+    return db.commit()
+
+
 async def add_admin(telegram_id: int, username: str, first_name: str, surname: str):
     """Adds new admin"""
     cur.execute(
@@ -147,13 +154,6 @@ async def update_user_role(user_id: int, role: int):
     cur.execute(
         'UPDATE users SET role = ? WHERE id = ?', (role, user_id,)
     )
-    return db.commit()
-
-
-async def remove_user_by_id(user_id: int):
-    """Removes user by passed id"""
-    cur.execute("DELETE FROM users WHERE id = ?",
-                (user_id,))
     return db.commit()
 
 
@@ -291,6 +291,13 @@ async def add_report(author_id: int, earned: str, scheduled_tasks: str,
     db.commit()
 
 
+async def remove_report_by_id(report_id: int):
+    cur.execute(
+        "DELETE FROM reports WHERE id = ?", (report_id,)
+    )
+    db.commit()
+
+
 async def get_user_last_request_id(user_id: int):
     result = cur.execute("SELECT id FROM requests WHERE author_id = ? ORDER BY id DESC LIMIT 1",
                          (user_id,))
@@ -357,12 +364,6 @@ async def update_report_scheduled_tasks(report_id, scheduled_tasks):
         "UPDATE reports SET scheduled_tasks = ? WHERE id = ?", (scheduled_tasks, report_id,)
     )
     db.commit()
-
-
-async def count_user_reports(user_id: int):
-    return cur.execute(
-        "SELECT COUNT(author_id) FROM reports WHERE author_id = ?", (user_id,)
-    )
 
 
 async def get_user_points(user_id: int):
@@ -496,3 +497,10 @@ async def get_user_points_per_month(user_id: int):
         "WHERE (user_id = ?) AND (date BETWEEN date(date('now', '-1 month'), '+1 day') AND date('now'))", (user_id,)
     )
     return result.fetchall()
+
+
+async def count_user_reports_per_day(user_id: int):
+    result = cur.execute(
+        "SELECT Count() FROM reports WHERE author_id = ? AND date = date('now')", (user_id,)
+    )
+    return result.fetchone()[0]

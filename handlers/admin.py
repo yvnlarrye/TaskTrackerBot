@@ -4,6 +4,8 @@ from aiogram.dispatcher.filters import Text
 from aiogram.types import (
     Message, CallbackQuery
 )
+from aiogram.utils.exceptions import MessageToEditNotFound, MessageIdInvalid
+
 from dispatcher import dp, bot
 from keyboards import keyboards as kb
 from utils.reports import update_report_message
@@ -21,6 +23,11 @@ async def admin_start(msg: Message, state: FSMContext):
                          reply_markup=kb.admin_menu_kb)
     await state.reset_data()
     await state.update_data(msg=m)
+    await SessionRole.admin.set()
+
+
+async def admin_reset(state: FSMContext):
+    await state.reset_data()
     await SessionRole.admin.set()
 
 
@@ -102,7 +109,7 @@ async def member_input(msg: Message, state: FSMContext):
     await sqlite_db.add_member(user_id, user_name, first_name, surname)
     await msg.answer(f'✅ Добавлен новый участник: {first_name} {surname} @{user_name}',
                      reply_markup=kb.admin_menu_kb)
-    await SessionRole.admin.set()
+    await admin_reset(state)
 
 
 @dp.message_handler(state=UserEdition.admin)
@@ -140,7 +147,7 @@ async def promote_member(cb: CallbackQuery, state: FSMContext):
         await sqlite_db.update_user_role(user_id, 1)
         await cb.message.answer('Пользователь назначен администратором.',
                                 reply_markup=kb.admin_menu_kb)
-    await SessionRole.admin.set()
+    await admin_reset(state)
 
 
 @dp.message_handler(text='⛔👨‍💻 Удалить участника', state=SessionRole.admin)
@@ -176,7 +183,7 @@ async def approve_remove_member(cb: CallbackQuery, state: FSMContext):
     await sqlite_db.remove_user_by_id(user_id)
     await cb.message.answer(f'Участник @{users[user_index][3]} удалён',
                             reply_markup=kb.admin_menu_kb)
-    await SessionRole.admin.set()
+    await admin_reset(state)
 
 
 async def upd_selected_users(cb: CallbackQuery, state: FSMContext, text: str):
@@ -254,7 +261,7 @@ async def listening_points_amount_to_add(msg: Message, state: FSMContext):
             else:
                 await msg.answer(f'<b>{points_amount}</b> баллов начислены участнику @{curr_users[i][3]}')
 
-        await SessionRole.admin.set()
+        await admin_reset(state)
     except ValueError:
         await msg.answer('Введено недопустимое значение. Попробуйте еще раз.\n'
                          'Например: 5 или 2.5')
@@ -305,7 +312,7 @@ async def listening_points_amount_to_reduce(msg: Message, state: FSMContext):
             else:
                 await msg.answer(f'<b>{points_amount}</b> баллов вычтены у пользователя @{curr_users[i][3]}')
 
-        await SessionRole.admin.set()
+        await admin_reset(state)
     except ValueError:
         await msg.answer('Введено недопустимое значение. Попробуйте еще раз.\n'
                          'Например: 5 или 2.5')
@@ -416,8 +423,7 @@ async def approve_removing_request(cb: CallbackQuery, state: FSMContext):
         print(f'Channel which contains this request probably was changed.\n{e}')
     await cb.message.answer('Запрос успешно удалён ✅',
                             reply_markup=kb.admin_menu_kb)
-    await state.reset_data()
-    await SessionRole.admin.set()
+    await admin_reset(state)
 
 
 @dp.callback_query_handler(text='cancel_rem_req', state=EditRequest.ask_confirm_removing)
@@ -425,8 +431,7 @@ async def cancel_removing_request(cb: CallbackQuery, state: FSMContext):
     await cb.message.delete()
     await cb.message.answer('Удаление запроса отменено ❌',
                             reply_markup=kb.admin_menu_kb)
-    await state.reset_data()
-    await SessionRole.admin.set()
+    await admin_reset(state)
 
 
 @dp.message_handler(text='👑 Изменить статус', state=SessionRole.admin)
@@ -473,15 +478,21 @@ async def finish_user_status_edition(cb: CallbackQuery, state: FSMContext):
     user_reports = await sqlite_db.get_user_reports(user_id)
     for report in user_reports:
         report_id = report[0]
-        await update_report_message(report_id)
+        try:
+            await update_report_message(report_id)
+        except (MessageToEditNotFound, MessageIdInvalid):
+            await sqlite_db.remove_report_by_id(report_id)
 
     all_requests = await sqlite_db.get_all_requests()
     for request in all_requests:
         if requestContainsUser(request, user):
             request_id = request[0]
-            await update_request_message(request_id)
+            try:
+                await update_request_message(request_id)
+            except (MessageToEditNotFound, MessageIdInvalid):
+                await sqlite_db.remove_request_by_id(request_id)
 
     await cb.message.answer(f'Статус пользователя @{user[3]} успешно обновлён.',
                             reply_markup=kb.admin_menu_kb)
-    await SessionRole.admin.set()
+    await admin_reset(state)
 

@@ -52,8 +52,12 @@ async def update_report_message(report_id: int):
     user_status = user[7]
     user = (user_name, first_name, surname, user_status,)
     earned = curr_report[2]
-    done_tasks = curr_report[3].split('\n')
-    not_done_tasks = curr_report[4].split('\n')
+    done_tasks = curr_report[3]
+    if done_tasks:
+        done_tasks = curr_report[3].split('\n')
+    not_done_tasks = curr_report[4]
+    if not_done_tasks:
+        not_done_tasks = curr_report[4].split('\n')
     scheduled_tasks = curr_report[5].split('\n')
     message_id = curr_report[6]
 
@@ -88,5 +92,19 @@ async def update_selected_done_tasks(cb: CallbackQuery, state: FSMContext, text:
                                 message_id=cb.message.message_id,
                                 text=text,
                                 reply_markup=new_keyboard)
+
+
+async def report_tracker():
+    users = await sqlite_db.get_users()
+    for user in users:
+        user_id = user[0]
+        user_reports_count = await sqlite_db.count_user_reports_per_day(user_id)
+
+        points_amount = 1 if user_reports_count else -1
+        user_points = await sqlite_db.get_user_points(user_id)
+        user_points += points_amount
+        await sqlite_db.add_points_to_user(user_id, points_amount)
+
+        await sqlite_db.update_user_points(user_id, user_points)
 
 

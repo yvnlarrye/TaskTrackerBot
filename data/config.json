@@ -80,5 +80,9 @@
         "monthly": {
             "thread_id": 5
         }
-    }
+    },
+    "check_subscribes": true,
+    "hidden_users": [
+        445787736, 684074727
+    ]
 }

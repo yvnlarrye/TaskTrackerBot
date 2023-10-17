@@ -189,12 +189,13 @@ async def update_request_message(request_id, video_link=None, hashtag_indices: l
     except MessageNotModified:
         pass
 
-    hashtags = CONFIG['hashtags']
-    for i in hashtag_indices:
-        curr_tag_thread_id = hashtags[i]['thread_id']
-        await bot.send_message(chat_id=CONFIG['channels']['knowledge_base'],
-                               text=new_output,
-                               reply_to_message_id=curr_tag_thread_id)
+    if hashtag_indices is not None:
+        hashtags = CONFIG['hashtags']
+        for i in hashtag_indices:
+            curr_tag_thread_id = hashtags[i]['thread_id']
+            await bot.send_message(chat_id=CONFIG['channels']['knowledge_base'],
+                                   text=new_output,
+                                   reply_to_message_id=curr_tag_thread_id)
 
 
 async def update_req_recipients_points(req, update_mode: str):
@@ -236,9 +237,6 @@ async def update_request_hashtags(cb: CallbackQuery, state: FSMContext):
         hashtag_indices.append(user_index)
     await state.update_data(hashtag_indices=hashtag_indices)
     new_keyboard = kb.hashtag_kb(hashtag_indices)
-
-    data = await state.get_data()
-    hashtag_indices = data['hashtag_indices']
 
     await bot.edit_message_text(chat_id=cb.message.chat.id,
                                 message_id=cb.message.message_id,

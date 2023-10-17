@@ -171,9 +171,5 @@ async def get_user_earned_total_amount(user_id: int):
 
 
 def curr_datetime():
-    offset = datetime.timedelta(hours=3)
-    tz = datetime.timezone(offset, name='МСК')
-    return datetime.datetime.now(tz=tz)
-
-
+    return datetime.datetime.now()
 

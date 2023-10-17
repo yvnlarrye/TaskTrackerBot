@@ -23,7 +23,7 @@ from utils.utils import (
     format_recipients, format_addressers, commit_report, delete_prev_message, get_status_icon
 )
 from states import SessionRole, CreateRequest, CreateReport, UserEdition, EditRequest, EditReport, Goals
-from datetime import datetime
+from datetime import datetime, time
 
 from utils.validators import validate_date
 from data import sqlite_db
@@ -437,11 +437,15 @@ async def edit_date(msg: Message, state: FSMContext):
 @dp.message_handler(text='📩 Отчетность', state=SessionRole.member)
 async def add_earned(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
-    m = await msg.answer('Сколько заработали 💰₽ за сегодняшний день?\n'
-                         'Введите значение в следующем формате: 150000',
-                         reply_markup=kb.prev_step_reply_kb)
-    await state.update_data(msg=m)
-    await CreateReport.earned.set()
+
+    if time(20) <= datetime.now().time() < time(22):
+        m = await msg.answer('Сколько заработали 💰₽ за сегодняшний день?\n'
+                             'Введите значение в следующем формате: 150000',
+                             reply_markup=kb.prev_step_reply_kb)
+        await state.update_data(msg=m)
+        await CreateReport.earned.set()
+    else:
+        await msg.answer('Отчёт можно заполнить только в период с 20:00 до 22:00.')
 
 
 @dp.message_handler(state=CreateReport.earned)
@@ -561,20 +565,8 @@ async def apply_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
     msg = await bot.send_message(chat_id=CONFIG['channels']['report_channel'],
                                  text=output)
     await sqlite_db.add_message_id_to_report(report_id, msg.message_id)
+
     await member_reset(state)
-
-
-# "report_channel": -1001982368833,
-# "request_channel": -1001816031562,
-# "goals_channel": -1001870833490,
-# "general": -1001534514369,
-# "daily_reports": -1001976036287,
-# "weekly_reports": -1001897848608,
-# "monthly_reports": -1001964041553,
-# "questions": -1001816334457,
-# "tables": -1001970518348,
-# "learning": -1001962418832,
-# "news": -1001962331016
 
 
 # @dp.message_handler(text='✏️ Ред. отчётность', state=SessionRole.member)

@@ -18,6 +18,12 @@ from data.config import CONFIG
 
 
 async def is_user_joined_all_chats(user_id: int):
+
+    check = CONFIG['check_subscribes']
+
+    if not check:
+        return True
+
     for chat_id in CONFIG['channels'].values():
         user_channel_status = await bot.get_chat_member(user_id=user_id, chat_id=chat_id)
         if user_channel_status['status'] == 'left':
@@ -141,19 +147,21 @@ async def week_rating(msg: Message, state: FSMContext):
         users = reversed(await sqlite_db.get_users_sorted_by_points())
         result_list = []
         for user in users:
-            user_id = user[0]
-            surname = user[5]
-            first_name = user[4]
-            user_name = user[3]
-            user_status = user[7]
-            user_points = user[6]
-            result_list.append(
-                f"{get_status_icon(user_status)}"
-                f"{hlink(f'{first_name} {surname}', f'https://t.me/{user_name}')} — "
-                f"🎯{user_points} / 💰 {await get_user_earned_total_amount(user_id)}"
-            )
+            telegram_id = user[1]
+            if telegram_id not in CONFIG['hidden_users']:
+                user_id = user[0]
+                surname = user[5]
+                first_name = user[4]
+                user_name = user[3]
+                user_status = user[7]
+                user_points = user[6]
+                result_list.append(
+                    f"{get_status_icon(user_status)}"
+                    f"{hlink(f'{first_name} {surname}', f'https://t.me/{user_name}')} — "
+                    f"🎯{user_points} / 💰 {await get_user_earned_total_amount(user_id)}"
+                )
         result = '\n'.join(result_list)
-        await msg.answer('<b>Имя — Баллы:</b>\n' + result,
+        await msg.answer('<b>Сумма баллов и дохода за текущий месяц:</b>\n' + result,
                          reply_markup=kb.prev_step_reply_kb)
         await SessionRole.general.set()
     else:
