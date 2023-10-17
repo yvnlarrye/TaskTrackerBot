@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from aiogram.utils.exceptions import ChatNotFound, BotBlocked
+from aiogram.utils.exceptions import ChatNotFound, BotBlocked, CantInitiateConversation
 from aiogram.utils.markdown import hlink
 
 from data import sqlite_db
@@ -125,7 +125,7 @@ async def first_reminder():
             await bot.send_message(chat_id=user[1], text='Привет! У тебя есть 2 часа, чтобы заполнить ежедневную отчётность и заработать 1 балл!')
         except ChatNotFound:
             await sqlite_db.remove_user_by_id(user[0])
-        except BotBlocked:
+        except (BotBlocked, CantInitiateConversation):
             pass
 
 
@@ -139,7 +139,7 @@ async def second_reminder():
                 await bot.send_message(chat_id=user[1], text='Ты ещё успеваешь написать свои денежные задачи⏳💰')
             except ChatNotFound:
                 await sqlite_db.remove_user_by_id(user_id)
-            except BotBlocked:
+            except (BotBlocked, CantInitiateConversation):
                 pass
 
 

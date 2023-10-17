@@ -1,7 +1,5 @@
 from aiogram.dispatcher import FSMContext
 from aiogram.types import Message, CallbackQuery
-from aiogram.utils.exceptions import ChatNotFound
-from aiogram.utils.markdown import hlink
 from data.config import PASS
 from dispatcher import dp
 from keyboards.keyboards import permission_denied_message

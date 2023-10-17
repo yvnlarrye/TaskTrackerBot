@@ -445,7 +445,9 @@ async def add_earned(msg: Message, state: FSMContext):
         await state.update_data(msg=m)
         await CreateReport.earned.set()
     else:
-        await msg.answer('Отчёт можно заполнить только в период с 20:00 до 22:00.')
+        await msg.answer('Отчёт можно заполнить только в период с 20:00 до 22:00.',
+                         reply_markup=kb.member_menu_kb)
+        await member_reset(state)
 
 
 @dp.message_handler(state=CreateReport.earned)
