@@ -64,7 +64,7 @@ async def back_to_member_menu_kb(msg: Message, state: FSMContext):
                                                     EditReport.list_of_not_done_tasks,
                                                     EditReport.list_of_scheduled_tasks,
                                                     EditReport.select_report_headers,
-                                                    EditReport.select_member_report
+                                                    EditReport.select_member_report, EditRequest.attach_file
                                                     ])
 async def back_to_member_menu_cb(cb: CallbackQuery, state: FSMContext):
     await cb.message.delete()
@@ -282,7 +282,7 @@ async def edit_request_status(cb: CallbackQuery, state: FSMContext):
 
     if status == 2 and request_status != 2:
         await cb.message.answer('Загрузите <b>видео</b> 📺 с зума или прикрепите иной <b>файл</b> 📄:',
-                                reply_markup=kb.prev_step_reply_kb)
+                                reply_markup=kb.edit_request_status_kb)
         await EditRequest.attach_file.set()
         return
 
@@ -300,8 +300,10 @@ async def edit_request_status(cb: CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(text='skip', state=EditRequest.attach_file)
 async def skip_attaching_file(cb: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    await sqlite_db.update_request_status(data['request_id'], 2)
-    await update_request_message(data['request_id'])
+    curr_request = data['req']
+    request_id = curr_request[0]
+    await sqlite_db.update_request_status(request_id, 2)
+    await update_request_message(request_id)
     await update_req_recipients_points(data['req'], '+')
 
     await cb.message.answer('Статус запроса успешно обновлён ✅',

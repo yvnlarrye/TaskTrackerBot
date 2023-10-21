@@ -31,10 +31,9 @@ member_menu_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     KeyboardButton('📝 Запрос'),
     KeyboardButton('📩 Отчетность')
 ).add(
-    KeyboardButton('✏️ Ред. запрос')
-    # KeyboardButton('✏️ Ред. отчётность')
-).add(
+    KeyboardButton('✏️ Ред. запрос'),
     KeyboardButton('✅ Закрытые цели')
+    # KeyboardButton('✏️ Ред. отчётность')
 ).add(
     KeyboardButton('🏠 Выйти')
 )
