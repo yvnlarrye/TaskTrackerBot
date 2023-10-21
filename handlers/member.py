@@ -552,46 +552,51 @@ async def listening_scheduled_tasks(msg: Message, state: FSMContext):
 
 @dp.callback_query_handler(text='apply_tasks', state=CreateReport.list_of_scheduled_tasks)
 async def apply_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
-    await cb.message.delete()
     data = await state.get_data()
-    await commit_report(data)
-
-    author_id = await sqlite_db.get_user_id(cb.from_user.id)
-    report_id = (await sqlite_db.get_user_last_report_id(author_id))[0]
-    user = await sqlite_db.get_user_by_id(author_id)
-    surname = user[5]
-    first_name = user[4]
-    user_name = user[3]
-    user_status = user[7]
-    earned = data['earned']
-
-    user = (user_name, first_name, surname, user_status,)
-
     new_scheduled_tasks = data['new_scheduled_tasks']
 
-    done_tasks_descriptions = None
-    if 'done_tasks' in data:
-        done_tasks = data['done_tasks']
-        done_tasks_descriptions = [task[2] for task in done_tasks]
+    if len(new_scheduled_tasks):
+        await cb.message.delete()
+        await commit_report(data)
 
-    not_done_tasks_descriptions = None
-    if 'not_done_tasks' in data:
-        not_done_tasks = data['not_done_tasks']
-        not_done_tasks_descriptions = [task[2] for task in not_done_tasks]
+        author_id = await sqlite_db.get_user_id(cb.from_user.id)
+        report_id = (await sqlite_db.get_user_last_report_id(author_id))[0]
+        user = await sqlite_db.get_user_by_id(author_id)
+        surname = user[5]
+        first_name = user[4]
+        user_name = user[3]
+        user_status = user[7]
+        earned = data['earned']
 
-    output = await print_report(report_id=report_id,
-                                user=user,
-                                earned=earned,
-                                scheduled_tasks=new_scheduled_tasks,
-                                done_tasks=done_tasks_descriptions,
-                                not_done_tasks=not_done_tasks_descriptions)
+        user = (user_name, first_name, surname, user_status,)
 
-    await cb.message.answer(output, reply_markup=kb.member_menu_kb)
-    msg = await bot.send_message(chat_id=CONFIG['channels']['report_channel'],
-                                 text=output)
-    await sqlite_db.add_message_id_to_report(report_id, msg.message_id)
+        done_tasks_descriptions = None
+        if 'done_tasks' in data:
+            done_tasks = data['done_tasks']
+            done_tasks_descriptions = [task[2] for task in done_tasks]
 
-    await member_reset(state)
+        not_done_tasks_descriptions = None
+        if 'not_done_tasks' in data:
+            not_done_tasks = data['not_done_tasks']
+            not_done_tasks_descriptions = [task[2] for task in not_done_tasks]
+
+        output = await print_report(report_id=report_id,
+                                    user=user,
+                                    earned=earned,
+                                    scheduled_tasks=new_scheduled_tasks,
+                                    done_tasks=done_tasks_descriptions,
+                                    not_done_tasks=not_done_tasks_descriptions)
+
+        await cb.message.answer(output, reply_markup=kb.member_menu_kb)
+        msg = await bot.send_message(chat_id=CONFIG['channels']['report_channel'],
+                                     text=output)
+        await sqlite_db.add_message_id_to_report(report_id, msg.message_id)
+
+        await member_reset(state)
+    else:
+        m = await cb.message.answer('Необходимо ввести хотя бы одну задачу.')
+        await asyncio.sleep(2)
+        await m.delete()
 
 
 # @dp.message_handler(text='✏️ Ред. отчётность', state=SessionRole.member)
