@@ -51,6 +51,8 @@ admin_menu_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
 ).add(
     KeyboardButton('🏠 Выйти'),
     KeyboardButton('↪️ Каналы')
+).add(
+    KeyboardButton('Сбросить баллы')
 )
 
 points_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
@@ -213,15 +215,15 @@ async def member_reports_kb(reports: list):
     reports_ids = [f'Отчёт #{req[0]}' for req in reports]
     return __list_of_elements_kb(reports_ids)
 
-
-async def report_headers_kb():
-    headers = [
-        'Заработано 💰',
-        'Выполненные задачи ✅',
-        'Невыполненные задачи ❌',
-        'Запланированные задачи 📝'
-    ]
-    return __list_of_elements_kb(headers)
+#
+# async def report_headers_kb():
+#     headers = [
+#         'Заработано 💰',
+#         'Выполненные задачи ✅',
+#         'Невыполненные задачи ❌',
+#         'Запланированные задачи 📝'
+#     ]
+#     return __list_of_elements_kb(headers)
 
 permission_denied_message = f'Привет! Рад, что ты теперь с нами!\n\n' \
                             f'Это закрытое сообщество <b>«Нельзя, Но Можно»</b> и здесь ты точно достигнешь всех своих целей! 🚀\n\n' \
@@ -248,7 +250,7 @@ def scheduled_tasks_kb(tasks: list, marked_tasks_indices: list = None):
 
     for i in range(len(formatted_tasks)):
         if marked_tasks_indices and i in marked_tasks_indices:
-            formatted_tasks[i] += '🔴'
+            formatted_tasks[i] = '🟢 ' + formatted_tasks[i]
         buttons_list.append([InlineKeyboardButton(text=formatted_tasks[i], callback_data=f'task_{i}')])
     buttons_list.append([InlineKeyboardButton(text='Далее⏩', callback_data='next_step')])
     buttons_list.append([InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')])
@@ -262,7 +264,7 @@ def hashtag_kb(marked_indices: list = None):
 
     for i in range(len(hashtag_names)):
         if marked_indices and i in marked_indices:
-            hashtag_names[i] += '🔴'
+            hashtag_names[i] = '🟢 ' + hashtag_names[i]
         button_row.append(InlineKeyboardButton(text=hashtag_names[i], callback_data=f'task_{i}'))
         if (i % 2 != 0) or (i == len(hashtag_names) - 1):
             buttons_list.append(button_row)
@@ -270,3 +272,9 @@ def hashtag_kb(marked_indices: list = None):
     buttons_list.append([InlineKeyboardButton(text='✅ Подтвердить', callback_data='next_step')])
     buttons_list.append([InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')])
     return InlineKeyboardMarkup(inline_keyboard=buttons_list)
+
+
+edit_request_status_kb = InlineKeyboardMarkup().add(
+    InlineKeyboardButton(text='Пропустить этот шаг', callback_data='skip'),
+    InlineKeyboardButton(text='↩️ Вернуться назад', callback_data='prev_step')
+)

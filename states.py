@@ -14,8 +14,7 @@ class UserEdition(StatesGroup):
     admin_name = State()
     admin_surname = State()
     member = State()
-    member_first_name = State()
-    member_surname = State()
+    member_name = State()
     ask_make_admin = State()
     remove_member = State()
 
@@ -41,7 +40,7 @@ class EditRequest(StatesGroup):
     addressers = State()
     recipients = State()
     text = State()
-    video = State()
+    attach_file = State()
 
 
 class CreateReport(StatesGroup):

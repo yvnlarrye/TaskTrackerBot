@@ -2,3 +2,4 @@
 /test.py
 /.env
 /venv/
+/data/task_tracker_db.db

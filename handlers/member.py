@@ -20,7 +20,7 @@ from utils.request import (
     update_req_recipients_points, update_request_hashtags
 )
 from utils.utils import (
-    format_recipients, format_addressers, commit_report, delete_prev_message, get_status_icon
+    format_recipients, format_addressers, commit_report, delete_prev_message, get_status_icon, distribute_points
 )
 from states import SessionRole, CreateRequest, CreateReport, UserEdition, EditRequest, EditReport, Goals
 from datetime import datetime, time
@@ -44,8 +44,8 @@ async def member_start(msg: Message, state: FSMContext):
                                                       EditRequest.status, EditReport.earned,
                                                       Goals.days, Goals.media, Goals.check_amount,
                                                       Goals.notion_link, Goals.comment,
-                                                      EditRequest.video,
-                                                      EditRequest.video])
+                                                      EditRequest.attach_file,
+                                                      EditRequest.attach_file])
 async def back_to_member_menu_kb(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     await member_start(msg, state)
@@ -92,6 +92,7 @@ async def new_admin_name(msg: Message):
 async def request(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     users = await sqlite_db.get_users()
+    users = [user for user in users if user[1] not in CONFIG['hidden_users']]
     await state.update_data(curr_users=users)
     await msg.answer(text=(await format_addressers(users)),
                      reply_markup=(await kb.update_addressers_kb(users)))
@@ -280,9 +281,9 @@ async def edit_request_status(cb: CallbackQuery, state: FSMContext):
         return
 
     if status == 2 and request_status != 2:
-        await cb.message.answer('📺 Загрузите видео с зума:',
+        await cb.message.answer('Загрузите <b>видео</b> 📺 с зума или прикрепите иной <b>файл</b> 📄:',
                                 reply_markup=kb.prev_step_reply_kb)
-        await EditRequest.video.set()
+        await EditRequest.attach_file.set()
         return
 
     if status != 2 and request_status == 2:
@@ -296,35 +297,57 @@ async def edit_request_status(cb: CallbackQuery, state: FSMContext):
     await member_reset(state)
 
 
-@dp.message_handler(state=EditRequest.video, content_types=['video'])
+@dp.callback_query_handler(text='skip', state=EditRequest.attach_file)
+async def skip_attaching_file(cb: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    await sqlite_db.update_request_status(data['request_id'], 2)
+    await update_request_message(data['request_id'])
+    await update_req_recipients_points(data['req'], '+')
+
+    await cb.message.answer('Статус запроса успешно обновлён ✅',
+                            reply_markup=kb.member_menu_kb)
+    await cb.message.delete()
+    await member_reset(state)
+
+
+@dp.message_handler(state=EditRequest.attach_file, content_types=['video', 'document'])
 async def listen_request_video(msg: Message, state: FSMContext):
     if msg.video:
-        m = await msg.answer('Подождите, идёт загрузка видео...')
-        file = await bot.get_file(msg.video.file_id)
-        file_extension = msg.video.file_name.split('.')[-1]
-        file_path = f"temp/video.{file_extension}"
-        await bot.download_file(file.file_path, file_path)
+        file_content = msg.video
+    elif msg.document:
+        file_content = msg.document
+    else:
+        await msg.answer('Недопустимый тип файла.',
+                         reply_markup=kb.member_menu_kb)
+        await member_reset(state)
+        return
 
-        user = await sqlite_db.get_user_by_id(await sqlite_db.get_user_id(msg.from_id))
+    m = await msg.answer('Подождите, идёт загрузка...')
+    file = await bot.get_file(file_content.file_id)
+    file_extension = file_content.file_name.split('.')[-1]
+    file_path = f"temp/file.{file_extension}"
+    await bot.download_file(file.file_path, file_path)
 
-        data = await state.get_data()
-        curr_request = data['req']
-        request_id = curr_request[0]
-        file_name = f"{msg.from_id}_video_{request_id}.{file_extension}"
+    user = await sqlite_db.get_user_by_id(await sqlite_db.get_user_id(msg.from_id))
 
-        video_shared_link = upload_file_to_google_drive(user, file_name, file_path)
+    data = await state.get_data()
+    curr_request = data['req']
+    request_id = curr_request[0]
+    file_name = f"{msg.from_id}_{'video' if msg.video else 'document'}_{request_id}.{file_extension}"
 
-        os.remove(file_path)
+    video_shared_link = upload_file_to_google_drive(user, file_name, file_path)
 
-        await m.delete()
-        message_text = 'Добавьте подходящие хештеги:'
-        await state.update_data(message_text=message_text,
-                                video_shared_link=video_shared_link,
-                                request_id=request_id)
-        await msg.answer(message_text,
-                         reply_markup=kb.hashtag_kb())
-        await EditRequest.add_hashtags.set()
-        await msg.delete()
+    os.remove(file_path)
+
+    await m.delete()
+    message_text = 'Добавьте подходящие хештеги:'
+    await state.update_data(message_text=message_text,
+                            video_shared_link=video_shared_link,
+                            request_id=request_id)
+    await msg.answer(message_text,
+                     reply_markup=kb.hashtag_kb())
+    await EditRequest.add_hashtags.set()
+    await msg.delete()
 
 
 @dp.callback_query_handler(Text(startswith="task_"), state=EditRequest.add_hashtags)
@@ -438,7 +461,7 @@ async def edit_date(msg: Message, state: FSMContext):
 async def add_earned(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
 
-    if time(20) <= datetime.now().time() < time(22):
+    if time(18) <= datetime.now().time() < time(20):
         m = await msg.answer('Сколько заработали 💰₽ за сегодняшний день?\n'
                              'Введите значение в следующем формате: 150000',
                              reply_markup=kb.prev_step_reply_kb)
@@ -812,9 +835,14 @@ async def listening_comment(msg: Message, state: FSMContext):
                              video=data['file_video'],
                              caption=caption)
     user_id = await sqlite_db.get_user_id(msg.from_id)
-    await sqlite_db.add_goal(user_id, data['notion_link'], int(data['check_amount']), msg.text)
+
+    check_amount = data['check_amount']
+    await distribute_points(user_id, check_amount)
+    await sqlite_db.add_goal(user_id, data['notion_link'], check_amount, msg.text)
 
     m = await msg.answer('Отчёт о выполненной цели добавлен ✅',
                          reply_markup=kb.member_menu_kb)
     await member_reset(state)
     await state.update_data(msg=m)
+
+

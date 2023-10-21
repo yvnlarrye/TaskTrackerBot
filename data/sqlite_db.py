@@ -423,6 +423,13 @@ async def add_goal(author_id: int, notion_link: str, check_amount: int, comment:
     db.commit()
 
 
+async def get_user_total_check_amounts(user_id: int):
+    result = cur.execute(
+        "SELECT check_amount FROM goals WHERE author_id = ?", (user_id,)
+    )
+    return result.fetchall()
+
+
 async def get_user_check_amounts_per_day(user_id: int):
     result = cur.execute(
         "SELECT check_amount FROM goals WHERE author_id = ? AND date = date('now')", (user_id,)
@@ -483,6 +490,8 @@ async def get_user_check_amounts_per_month(user_id: int):
     return result.fetchall()
 
 
+
+
 async def get_user_earned_per_month(user_id: int):
     result = cur.execute(
         "SELECT earned FROM reports "
@@ -504,3 +513,8 @@ async def count_user_reports_per_day(user_id: int):
         "SELECT Count() FROM reports WHERE author_id = ? AND date = date('now')", (user_id,)
     )
     return result.fetchone()[0]
+
+
+async def delete_points():
+    cur.execute("DELETE FROM points")
+    db.commit()

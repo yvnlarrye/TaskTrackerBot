@@ -2,7 +2,7 @@ import json
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.types import (
-    Message, CallbackQuery
+    Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 )
 from aiogram.utils.exceptions import MessageToEditNotFound, MessageIdInvalid
 
@@ -79,37 +79,30 @@ async def member_name(msg: Message, state: FSMContext):
         else:
             username = msg.forward_from.username
             await state.update_data(username=username, user_id=user_id)
-            await msg.answer('Введите имя участника:',
+            await msg.answer('Введите <b>имя</b> и <b>фамилию</b> участника:',
                              reply_markup=kb.prev_step_reply_kb)
-            await UserEdition.member_first_name.set()
+            await UserEdition.member_name.set()
     except AttributeError:
         await msg.answer('Вы не переслали сообщение, или пользователь запретил перессылку',
                          reply_markup=kb.prev_step_reply_kb)
         await SessionRole.admin.set()
 
 
-@dp.message_handler(state=UserEdition.member_first_name)
-async def member_surname(msg: Message, state: FSMContext):
-    await state.update_data(first_name=msg.text)
-    await msg.answer('Введите фамилию участника:',
-                     reply_markup=kb.prev_step_reply_kb)
-    await UserEdition.member_surname.set()
+@dp.message_handler(state=UserEdition.member_name)
+async def listen_member_name(msg: Message, state: FSMContext):
+    name_parts = msg.text.split(' ')
+    if len(name_parts) == 2:
+        data = await state.get_data()
 
+        user_id = data['user_id']
+        user_name = data['username']
+        first_name = name_parts[0].strip()
+        surname = name_parts[1].strip()
 
-@dp.message_handler(state=UserEdition.member_surname)
-async def member_input(msg: Message, state: FSMContext):
-    await state.update_data(surname=msg.text)
-    data = await state.get_data()
-
-    user_id = data['user_id']
-    user_name = data['username']
-    first_name = data['first_name']
-    surname = data['surname']
-
-    await sqlite_db.add_member(user_id, user_name, first_name, surname)
-    await msg.answer(f'✅ Добавлен новый участник: {first_name} {surname} @{user_name}',
-                     reply_markup=kb.admin_menu_kb)
-    await admin_reset(state)
+        await sqlite_db.add_member(user_id, user_name, first_name, surname)
+        await msg.answer(f'✅ Добавлен новый участник: {first_name} {surname} @{user_name}',
+                         reply_markup=kb.admin_menu_kb)
+        await admin_reset(state)
 
 
 @dp.message_handler(state=UserEdition.admin)
@@ -220,6 +213,7 @@ async def points(msg: Message, state: FSMContext):
 async def add_points(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     users = await sqlite_db.get_users()
+    users = [user for user in users if user[1] not in CONFIG['hidden_users']]
     await msg.answer('Выберите одного или нескольких участников, кому хотите начислить баллы:',
                      reply_markup=(await kb.update_users_to_update_points(users)))
     await state.update_data(role_state=(await state.get_state()).split(':')[1],
@@ -271,6 +265,7 @@ async def listening_points_amount_to_add(msg: Message, state: FSMContext):
 async def reduce_points(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     users = await sqlite_db.get_users()
+    users = [user for user in users if user[1] not in CONFIG['hidden_users']]
     await msg.answer('Выберите одного или несколько участников, у кого хотите отнять баллы:',
                      reply_markup=(await kb.update_users_to_update_points(users)))
     await state.update_data(role_state=(await state.get_state()).split(':')[1],
@@ -438,7 +433,7 @@ async def cancel_removing_request(cb: CallbackQuery, state: FSMContext):
 async def change_status(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     users = await sqlite_db.get_users()
-    await msg.answer(text='<b>Выберите участника, у которого хотите изменить статус:</b>\n\n',
+    await msg.answer(text='Выберите участника, у которого хотите изменить статус:',
                      reply_markup=(await kb.select_member_to_edit_status_kb(users)))
     await state.update_data(curr_users=users)
     await UserEdition.edit_status.set()
@@ -478,21 +473,43 @@ async def finish_user_status_edition(cb: CallbackQuery, state: FSMContext):
     user_reports = await sqlite_db.get_user_reports(user_id)
     for report in user_reports:
         report_id = report[0]
-        try:
-            await update_report_message(report_id)
-        except (MessageToEditNotFound, MessageIdInvalid):
-            await sqlite_db.remove_report_by_id(report_id)
+        await update_report_message(report_id)
 
     all_requests = await sqlite_db.get_all_requests()
     for request in all_requests:
         if requestContainsUser(request, user):
             request_id = request[0]
-            try:
-                await update_request_message(request_id)
-            except (MessageToEditNotFound, MessageIdInvalid):
-                await sqlite_db.remove_request_by_id(request_id)
+            await update_request_message(request_id)
 
     await cb.message.answer(f'Статус пользователя @{user[3]} успешно обновлён.',
                             reply_markup=kb.admin_menu_kb)
     await admin_reset(state)
 
+
+@dp.message_handler(text='Сбросить баллы', state=SessionRole.admin)
+async def reset_all_users_points(msg: Message):
+    await msg.delete()
+    keyboard = InlineKeyboardMarkup().add(
+        InlineKeyboardButton(text='✅Да', callback_data='approve_reset_points'),
+        InlineKeyboardButton(text='❌Нет', callback_data='refuse_reset_points')
+    )
+
+    await msg.answer('Вы уверены что хотите обновить баллы?',
+                     reply_markup=keyboard)
+
+
+@dp.callback_query_handler(text='approve_reset_points', state=SessionRole.admin)
+async def approve_reset_points(cb: CallbackQuery):
+    await cb.message.delete()
+    users = await sqlite_db.get_users()
+    for user in users:
+        await sqlite_db.update_user_points(user[0], 0)
+    await sqlite_db.delete_points()
+    await cb.message.answer('Баллы успешно обновлены ✅',
+                            reply_markup=kb.admin_menu_kb)
+
+
+@dp.callback_query_handler(text='refuse_reset_points', state=SessionRole.admin)
+async def refuse_reset_points(cb: CallbackQuery, state: FSMContext):
+    await cb.message.delete()
+    await admin_start(cb.message, state)

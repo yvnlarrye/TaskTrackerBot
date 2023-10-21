@@ -173,3 +173,39 @@ async def get_user_earned_total_amount(user_id: int):
 def curr_datetime():
     return datetime.datetime.now()
 
+
+async def distribute_points(user_id: int, check_amount: int):
+    status = await sqlite_db.get_user_status_by_id(user_id)
+
+    if status == STATUS['white']['value']:
+        interval = 50000
+    elif status == STATUS['silver']['value']:
+        interval = 60000
+    elif status == STATUS['gold']['value']:
+        interval = 70000
+    elif status == STATUS['diamond']['value']:
+        interval = 80000
+    elif status == STATUS['black']['value']:
+        interval = 90000
+    else:
+        raise ValueError('Func got wrong user status from database')
+
+    all_user_checks = await sqlite_db.get_user_total_check_amounts(user_id)
+    current_checks_total = 0
+    for check in all_user_checks:
+        current_checks_total += check[0]
+
+    remainder = current_checks_total % interval
+    multiplicity = (remainder + check_amount) // interval
+
+    if multiplicity:
+        points = multiplicity * 30
+        curr_points = await sqlite_db.get_user_points(user_id)
+        await sqlite_db.add_points_to_user(user_id, points)
+        await sqlite_db.update_user_points(user_id, curr_points + points)
+        telegram_id = (await sqlite_db.get_user_by_id(user_id))[1]
+        try:
+            await bot.send_message(chat_id=telegram_id,
+                                   text=f'Ты заработал <b>{points}</b> баллов 🎯 за очередные <b>{multiplicity * interval}</b>💰!')
+        except:
+            pass

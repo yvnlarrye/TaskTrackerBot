@@ -11,6 +11,7 @@ from utils.utils import get_status_icon, curr_datetime
 
 async def send_daily_report():
     users = await sqlite_db.get_users()
+    result = [f"<b>Дата:</b> {curr_datetime().strftime('%d.%m.%y')}"]
     for user in users:
         telegram_id = user[1]
         if telegram_id not in CONFIG['hidden_users']:
@@ -33,16 +34,14 @@ async def send_daily_report():
             for points_record in points_records:
                 total_points += points_record[0]
 
-            report_output = f"<b>Дата:</b> {curr_datetime().strftime('%d.%m.%y')}\n\n" \
-                            f"{user_output}\n\n" \
-                            f"💸 Заработал: {total_earned}\n" \
-                            f"✅ Заработал баллов: {total_points}\n" \
-                            f"🎯 Закрыл целей: {goals_count}\n" \
-                            f"💰 Целей закрыто на сумму: {total_check_amount}"
+            report_output = f"{user_output}\n" \
+                            f"💸{total_earned} / 💯{total_points} / 🎯{goals_count} на {total_check_amount}₽"
 
-            await bot.send_message(chat_id=CONFIG['channels']['period_reports'],
-                                   reply_to_message_id=CONFIG['period_reports']['daily']['thread_id'],
-                                   text=report_output)
+            result.append(report_output)
+    if len(users):
+        await bot.send_message(chat_id=CONFIG['channels']['period_reports'],
+                               reply_to_message_id=CONFIG['period_reports']['daily']['thread_id'],
+                               text='\n\n'.join(result))
 
 
 async def send_weekly_report():

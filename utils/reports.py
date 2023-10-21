@@ -2,6 +2,7 @@ import datetime
 
 from aiogram.dispatcher import FSMContext
 from aiogram.types import CallbackQuery
+from aiogram.utils.exceptions import ChatNotFound, MessageIdInvalid, MessageToEditNotFound
 
 from data import sqlite_db
 from data.config import CONFIG
@@ -42,33 +43,36 @@ async def print_report(report_id: int, user: tuple, earned: str,
 
 
 async def update_report_message(report_id: int):
-    curr_report = await sqlite_db.get_report_by_id(report_id)
+    try:
+        curr_report = await sqlite_db.get_report_by_id(report_id)
 
-    user = await sqlite_db.get_user_by_id(curr_report[1])
+        user = await sqlite_db.get_user_by_id(curr_report[1])
 
-    surname = user[5]
-    first_name = user[4]
-    user_name = user[3]
-    user_status = user[7]
-    user = (user_name, first_name, surname, user_status,)
-    earned = curr_report[2]
-    done_tasks = curr_report[3]
-    if done_tasks:
-        done_tasks = curr_report[3].split('\n')
-    not_done_tasks = curr_report[4]
-    if not_done_tasks:
-        not_done_tasks = curr_report[4].split('\n')
-    scheduled_tasks = curr_report[5].split('\n')
-    message_id = curr_report[6]
+        surname = user[5]
+        first_name = user[4]
+        user_name = user[3]
+        user_status = user[7]
+        user = (user_name, first_name, surname, user_status,)
+        earned = curr_report[2]
+        done_tasks = curr_report[3]
+        if done_tasks:
+            done_tasks = curr_report[3].split('\n')
+        not_done_tasks = curr_report[4]
+        if not_done_tasks:
+            not_done_tasks = curr_report[4].split('\n')
+        scheduled_tasks = curr_report[5].split('\n')
+        message_id = curr_report[6]
 
-    new_output = await print_report(report_id=report_id,
-                                    user=user,
-                                    earned=earned,
-                                    done_tasks=done_tasks,
-                                    not_done_tasks=not_done_tasks,
-                                    scheduled_tasks=scheduled_tasks)
+        new_output = await print_report(report_id=report_id,
+                                        user=user,
+                                        earned=earned,
+                                        done_tasks=done_tasks,
+                                        not_done_tasks=not_done_tasks,
+                                        scheduled_tasks=scheduled_tasks)
 
-    await bot.edit_message_text(text=new_output, chat_id=CONFIG['channels']['report_channel'], message_id=message_id)
+        await bot.edit_message_text(text=new_output, chat_id=CONFIG['channels']['report_channel'], message_id=message_id)
+    except (MessageToEditNotFound, MessageIdInvalid, ChatNotFound):
+        await sqlite_db.remove_report_by_id(report_id)
 
 
 async def update_selected_done_tasks(cb: CallbackQuery, state: FSMContext, text: str):

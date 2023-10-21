@@ -19,9 +19,10 @@ async def scheduler():
     aioschedule.every().day.at("23:59").do(send_daily_report)
     aioschedule.every().sunday.at("23:59").do(send_weekly_report)
     aioschedule.every().day.at("23:58").do(send_monthly_report)
-    aioschedule.every().day.at("20:00").do(first_reminder)
-    aioschedule.every().day.at("21:30").do(second_reminder)
-    aioschedule.every().day.at("22:00").do(report_tracker)
+
+    aioschedule.every().day.at("18:00").do(first_reminder)
+    aioschedule.every().day.at("19:30").do(second_reminder)
+    aioschedule.every().day.at("20:00").do(report_tracker)
 
     while True:
         await aioschedule.run_pending()
