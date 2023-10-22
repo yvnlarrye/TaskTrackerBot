@@ -4,7 +4,7 @@ from data.config import PASS
 from dispatcher import dp
 from keyboards.keyboards import permission_denied_message
 from states import SessionRole
-from utils.period_reports import *
+from utils.tasks import *
 from utils.utils import is_admin, get_status_icon
 from handlers.admin import admin_start
 from handlers.member import member_start
@@ -150,12 +150,11 @@ async def week_rating(msg: Message, state: FSMContext):
                 user_id = user[0]
                 surname = user[5]
                 first_name = user[4]
-                user_name = user[3]
                 user_status = user[7]
                 user_points = user[6]
                 result_list.append(
                     f"{get_status_icon(user_status)}"
-                    f"{hlink(f'{first_name} {surname}', f'https://t.me/{user_name}')} — "
+                    f"{hlink(f'{first_name} {surname}', f'tg://user?id={telegram_id}')} — "
                     f"🎯{user_points} / 💰 {await get_user_earned_total_amount(user_id)}"
                 )
         result = '\n'.join(result_list)

@@ -15,12 +15,6 @@ intro_admin_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     KeyboardButton('🏆📈 Топы')
 )
 
-# .add(
-#     KeyboardButton('TEST_DAILY'),
-#     KeyboardButton('TEST_WEEKLY'),
-#     KeyboardButton('TEST_MONTHLY'),
-# )
-
 intro_member_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     KeyboardButton('👨‍💻 Участник')
 ).add(
@@ -33,7 +27,6 @@ member_menu_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
 ).add(
     KeyboardButton('✏️ Ред. запрос'),
     KeyboardButton('✅ Закрытые цели')
-    # KeyboardButton('✏️ Ред. отчётность')
 ).add(
     KeyboardButton('🏠 Выйти')
 )

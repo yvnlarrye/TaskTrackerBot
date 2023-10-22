@@ -1,5 +1,7 @@
-from datetime import timedelta
+from datetime import timedelta, time
 
+import aioschedule
+import asyncio
 from aiogram.utils.exceptions import ChatNotFound, BotBlocked, CantInitiateConversation
 from aiogram.utils.markdown import hlink
 
@@ -16,7 +18,7 @@ async def send_daily_report():
         telegram_id = user[1]
         if telegram_id not in CONFIG['hidden_users']:
             check_amount_records = await sqlite_db.get_user_check_amounts_per_day(user[0])
-            user_output = f"{get_status_icon(user[7])} {hlink(f'{user[4]} {user[5]}', f'https://t.me/{user[3]}')} — {user[7]}"
+            user_output = f"{get_status_icon(user[7])} {hlink(f'{user[4]} {user[5]}', f'tg://user?id={user[1]}')} — {user[7]}"
 
             goals_count = len(check_amount_records)
 
@@ -46,12 +48,13 @@ async def send_daily_report():
 
 async def send_weekly_report():
     users = await sqlite_db.get_users()
-    result = [f"<b>Даты:</b> {(curr_datetime() - timedelta(days=6)).strftime('%d.%m.%y')} - {curr_datetime().strftime('%d.%m.%y')}"]
+    result = [
+        f"<b>Даты:</b> {(curr_datetime() - timedelta(days=6)).strftime('%d.%m.%y')} - {curr_datetime().strftime('%d.%m.%y')}"]
     for user in users:
         telegram_id = user[1]
         if telegram_id not in CONFIG['hidden_users']:
             check_amount_records = await sqlite_db.get_user_check_amounts_per_day(user[0])
-            user_output = f"{get_status_icon(user[7])} {hlink(f'{user[4]} {user[5]}', f'https://t.me/{user[3]}')} — {user[7]}"
+            user_output = f"{get_status_icon(user[7])} {hlink(f'{user[4]} {user[5]}', f'tg://user?id={user[1]}')} — {user[7]}"
 
             goals_count = len(check_amount_records)
 
@@ -86,7 +89,7 @@ async def send_monthly_report():
             telegram_id = user[1]
             if telegram_id not in CONFIG['hidden_users']:
                 check_amount_records = await sqlite_db.get_user_check_amounts_per_month(user[0])
-                user_output = f"{get_status_icon(user[7])} {hlink(f'{user[4]} {user[5]}', f'https://t.me/{user[3]}')} — {user[7]}"
+                user_output = f"{get_status_icon(user[7])} {hlink(f'{user[4]} {user[5]}', f'tg://user?id={user[1]}')} — {user[7]}"
 
                 goals_count = len(check_amount_records)
 
@@ -120,7 +123,8 @@ async def first_reminder():
     users = await sqlite_db.get_users()
     for user in users:
         try:
-            await bot.send_message(chat_id=user[1], text='Привет! У тебя есть 2 часа, чтобы заполнить ежедневную отчётность и заработать 1 балл!')
+            await bot.send_message(chat_id=user[1],
+                                   text='Привет! У тебя есть 2 часа, чтобы заполнить ежедневную отчётность и заработать 1 балл!')
         except ChatNotFound:
             await sqlite_db.remove_user_by_id(user[0])
         except (BotBlocked, CantInitiateConversation):
@@ -141,4 +145,46 @@ async def second_reminder():
                 pass
 
 
+async def report_tracker():
+    users = await sqlite_db.get_users()
+    for user in users:
+        user_id = user[0]
+        user_reports_count = await sqlite_db.count_user_reports_per_day(user_id)
 
+        points_amount = 1 if user_reports_count else -1
+        user_points = await sqlite_db.get_user_points(user_id)
+        user_points += points_amount
+        await sqlite_db.add_points_to_user(user_id, points_amount)
+
+        await sqlite_db.update_user_points(user_id, user_points)
+
+
+async def tasks_cleaner():
+    tasks = await sqlite_db.get_tasks_ids_scheduled_on_today()
+    for task in tasks:
+        await sqlite_db.remove_scheduled_task_by_id(task[0])
+
+
+async def scheduler():
+    aioschedule.every().day.at("23:59").do(send_daily_report)
+    aioschedule.every().sunday.at("23:59").do(send_weekly_report)
+    aioschedule.every().day.at("23:58").do(send_monthly_report)
+
+    report_time = CONFIG['report_time']
+
+    mid_notif_time = time(hour=int(report_time['start'].split(":")[0]) + 1,
+                          minute=int(report_time['start'].split(":")[1]) + 30).strftime("%H:%M")
+
+    aioschedule.every().day.at(report_time['start']).do(first_reminder)
+    aioschedule.every().day.at(mid_notif_time).do(second_reminder)
+
+    aioschedule.every().day.at(report_time['end']).do(report_tracker)
+
+    clean_tasks_time = time(hour=int(report_time['end'].split(":")[0]),
+                            minute=int(report_time['end'].split(":")[1]) + 1).strftime("%H:%M")
+
+    aioschedule.every().day.at(clean_tasks_time).do(tasks_cleaner)
+
+    while True:
+        await aioschedule.run_pending()
+        await asyncio.sleep(1)

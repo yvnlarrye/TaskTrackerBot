@@ -79,10 +79,10 @@ async def commit_request(data: dict):
     author_id = await sqlite_db.get_user_id(data['author_telegram_id'])
 
     users = data['curr_users']
-    addressers = '\n'.join([users[user_index][3] for user_index in data['request_from']])
-    main_recipient = users[data['main_recipient']][3]
+    addressers = '\n'.join([str(users[user_index][1]) for user_index in data['request_from']])
+    main_recipient = str(users[data['main_recipient']][1])
     if data['secondary_recipient'] is not None:
-        secondary_recipient = users[data['secondary_recipient']][3]
+        secondary_recipient = str(users[data['secondary_recipient']][1])
     else:
         secondary_recipient = ''
     text = data['text']
@@ -100,15 +100,15 @@ async def commit_request(data: dict):
 def print_request(request_id: int, status: int, addressers: list, main_recipient: tuple,
                   secondary_recipient: tuple, text: str, date: str, video_link=None, hashtag_indices: list = None):
     addr_output = '\n'.join([
-        f"{get_status_icon(addresser[3])} {hlink(f'{addresser[1]} {addresser[2]}', f'https://t.me/{addresser[0]}')} — {addresser[3]}"
+        f"{get_status_icon(addresser[3])} {hlink(f'{addresser[1]} {addresser[2]}', f'tg://user?id={addresser[0]}')} — {addresser[3]}"
         for addresser in addressers
     ])
-    main_recipient_output = f"{get_status_icon(main_recipient[3])} {hlink(f'{main_recipient[1]} {main_recipient[2]}', f'https://t.me/{main_recipient[0]}')} — {main_recipient[3]}"
+    main_recipient_output = f"{get_status_icon(main_recipient[3])} {hlink(f'{main_recipient[1]} {main_recipient[2]}', f'tg://user?id={main_recipient[0]}')} — {main_recipient[3]}"
     if len(secondary_recipient):
         secondary_recipient_output = \
-            f"Дополнительный исполнитель:\n" \
+            f"<b>Дополнительный исполнитель:</b>\n" \
             f"{get_status_icon(secondary_recipient[3])} " \
-            f"{hlink(f'{secondary_recipient[1]} {secondary_recipient[2]}', f'https://t.me/{secondary_recipient[0]}')} — " \
+            f"{hlink(f'{secondary_recipient[1]} {secondary_recipient[2]}', f'tg://user?id={secondary_recipient[0]}')} — " \
             f"{secondary_recipient[3]}\n\n"
     else:
         secondary_recipient_output = ''
@@ -131,7 +131,7 @@ def print_request(request_id: int, status: int, addressers: list, main_recipient
              f"\n" \
              f"<b>Кому:</b>\n" \
              f"\n" \
-             f"Основной исполнитель:\n" \
+             f"<b>Основной исполнитель:</b>\n" \
              f"{main_recipient_output}\n\n" \
              f"{secondary_recipient_output}" \
              f"<b>Запрос:</b>\n" \
@@ -163,19 +163,19 @@ async def update_request_message(request_id, video_link=None, hashtag_indices: l
         secondary_recipient = curr_request[5].strip()
 
         addressers_transfer_data = []
-        for username in addressers:
-            addresser = await sqlite_db.get_user_by_username(username.strip())
+        for telegram_id in addressers:
+            addresser = await sqlite_db.get_user_by_id(await sqlite_db.get_user_id(int(telegram_id)))
             addressers_transfer_data.append(
-                (addresser[3], addresser[4], addresser[5], addresser[7],)
+                (addresser[1], addresser[4], addresser[5], addresser[7],)
             )
 
-        main_recipient = await sqlite_db.get_user_by_username(main_recipient)
-        main_recipient_transfer_data = (main_recipient[3], main_recipient[4], main_recipient[5], main_recipient[7],)
+        main_recipient = await sqlite_db.get_user_by_id(await sqlite_db.get_user_id(int(main_recipient)))
+        main_recipient_transfer_data = (main_recipient[1], main_recipient[4], main_recipient[5], main_recipient[7],)
 
         if secondary_recipient != '':
-            secondary_recipient = await sqlite_db.get_user_by_username(secondary_recipient)
+            secondary_recipient = await sqlite_db.get_user_by_id(await sqlite_db.get_user_id(int(secondary_recipient)))
             secondary_recipient_transfer_data = (
-                secondary_recipient[3], secondary_recipient[4], secondary_recipient[5], secondary_recipient[7],
+                secondary_recipient[1], secondary_recipient[4], secondary_recipient[5], secondary_recipient[7],
             )
         else:
             secondary_recipient_transfer_data = ()
@@ -210,7 +210,7 @@ async def update_req_recipients_points(req, update_mode: str):
         sign = -1
 
     if sign is not None:
-        main_recipient_id = (await sqlite_db.get_user_by_username(req[4]))[0]
+        main_recipient_id = await sqlite_db.get_user_id(int(req[4]))
         main_recipient_rate = await sqlite_db.get_user_points(main_recipient_id)
         main_recipient_rate += 1 * sign
         await sqlite_db.add_points_to_user(main_recipient_id, 1 * sign)
@@ -218,7 +218,7 @@ async def update_req_recipients_points(req, update_mode: str):
 
         secondary_recipient = req[5]
         if secondary_recipient != '':
-            secondary_recipient_id = (await sqlite_db.get_user_by_username(req[5]))[0]
+            secondary_recipient_id = await sqlite_db.get_user_id(int(req[5]))
             recipient_rate = await sqlite_db.get_user_points(secondary_recipient_id)
             recipient_rate += 0.5 * sign
             await sqlite_db.add_points_to_user(secondary_recipient_id, 0.5 * sign)

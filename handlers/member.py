@@ -27,7 +27,7 @@ from datetime import datetime, time
 
 from utils.validators import validate_date
 from data import sqlite_db
-from data.config import REQUEST_STATUS, CONFIG
+from data import config as cfg
 
 
 async def member_start(msg: Message, state: FSMContext):
@@ -92,7 +92,7 @@ async def new_admin_name(msg: Message):
 async def request(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     users = await sqlite_db.get_users()
-    users = [user for user in users if user[1] not in CONFIG['hidden_users']]
+    users = [user for user in users if user[1] not in cfg.CONFIG['hidden_users']]
     await state.update_data(curr_users=users)
     await msg.answer(text=(await format_addressers(users)),
                      reply_markup=(await kb.update_addressers_kb(users)))
@@ -176,20 +176,20 @@ async def confirm_creating_request(cb: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     users = data['curr_users']
     addressers = [
-        (users[user_index][3], users[user_index][4], users[user_index][5], users[user_index][7],)
+        (users[user_index][1], users[user_index][4], users[user_index][5], users[user_index][7],)
         for user_index in data['request_from']
     ]
     main_recipient = users[data['main_recipient']]
-    main_recipient = (main_recipient[3], main_recipient[4], main_recipient[5], main_recipient[7],)
+    main_recipient = (main_recipient[1], main_recipient[4], main_recipient[5], main_recipient[7],)
     if data['secondary_recipient'] is not None:
         secondary_recipient = users[data['secondary_recipient']]
         secondary_recipient = (
-            secondary_recipient[3], secondary_recipient[4], secondary_recipient[5], secondary_recipient[7],
+            secondary_recipient[1], secondary_recipient[4], secondary_recipient[5], secondary_recipient[7],
         )
     else:
         secondary_recipient = ()
     output = print_request(request_id=request_id,
-                           status=REQUEST_STATUS['in_progress'],
+                           status=cfg.REQUEST_STATUS['in_progress'],
                            addressers=addressers,
                            main_recipient=main_recipient,
                            secondary_recipient=secondary_recipient,
@@ -198,7 +198,7 @@ async def confirm_creating_request(cb: CallbackQuery, state: FSMContext):
     await cb.message.answer(output,
                             reply_markup=kb.member_menu_kb)
     await cb.message.delete()
-    msg = await bot.send_message(chat_id=CONFIG['channels']['request_channel'],
+    msg = await bot.send_message(chat_id=cfg.CONFIG['channels']['request_channel'],
                                  text=output)
     await sqlite_db.add_message_id_to_request(request_id, msg.message_id)
 
@@ -244,12 +244,14 @@ async def select_request_headers(cb: CallbackQuery, state: FSMContext):
             await EditRequest.status.set()
         case 1:
             users = await sqlite_db.get_users()
+            users = [user for user in users if user[1] not in cfg.CONFIG['hidden_users']]
             await state.update_data(curr_users=users)
             await cb.message.answer(f'{(await format_addressers(users))}',
                                     reply_markup=(await kb.update_addressers_kb(users)))
             await EditRequest.addressers.set()
         case 2:
             users = await sqlite_db.get_users()
+            users = [user for user in users if user[1] not in cfg.CONFIG['hidden_users']]
             await state.update_data(curr_users=users)
             await cb.message.answer(f'{(await format_recipients(users))}',
                                     reply_markup=(await kb.update_recipients_kb(users)))
@@ -386,7 +388,7 @@ async def confirm_edit_addressers(cb: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     users = data['curr_users']
     request_id = data['req'][0]
-    addressers = '\n'.join([users[user_index][3] for user_index in data['request_from']])
+    addressers = '\n'.join([str(users[user_index][1]) for user_index in data['request_from']])
     await sqlite_db.update_request_addressers(request_id, addressers)
 
     await update_request_message(request_id)
@@ -410,9 +412,9 @@ async def confirm_edit_recipients(cb: CallbackQuery, state: FSMContext):
     else:
         users = data['curr_users']
         request_id = data['req'][0]
-        main_recipient = users[data['main_recipient']][3]
+        main_recipient = str(users[data['main_recipient']][1])
         if data['secondary_recipient'] is not None:
-            secondary_recipient = users[data['secondary_recipient']][3]
+            secondary_recipient = str(users[data['secondary_recipient']][3])
         else:
             secondary_recipient = ''
         await sqlite_db.update_request_recipients(request_id, main_recipient, secondary_recipient)
@@ -462,15 +464,20 @@ async def edit_date(msg: Message, state: FSMContext):
 @dp.message_handler(text='📩 Отчетность', state=SessionRole.member)
 async def add_earned(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
+    report_time = cfg.get()['report_time']
+    left_time_parts = report_time['start'].split(':')
+    left_time = time(hour=int(left_time_parts[0]), minute=int(left_time_parts[1]))
+    right_time_parts = report_time['end'].split(':')
+    right_time = time(hour=int(right_time_parts[0]), minute=int(right_time_parts[1]))
 
-    if time(18) <= datetime.now().time() < time(20):
+    if left_time <= datetime.now().time() < right_time:
         m = await msg.answer('Сколько заработали 💰₽ за сегодняшний день?\n'
                              'Введите значение в следующем формате: 150000',
                              reply_markup=kb.prev_step_reply_kb)
         await state.update_data(msg=m)
         await CreateReport.earned.set()
     else:
-        await msg.answer('Отчёт можно заполнить только в период с 20:00 до 22:00.',
+        await msg.answer(f'Отчёт можно заполнить только в период с {report_time["start"]} до {report_time["end"]}.',
                          reply_markup=kb.member_menu_kb)
         await member_reset(state)
 
@@ -566,11 +573,11 @@ async def apply_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
         user = await sqlite_db.get_user_by_id(author_id)
         surname = user[5]
         first_name = user[4]
-        user_name = user[3]
+        telegram_id = user[1]
         user_status = user[7]
         earned = data['earned']
 
-        user = (user_name, first_name, surname, user_status,)
+        user = (telegram_id, first_name, surname, user_status,)
 
         done_tasks_descriptions = None
         if 'done_tasks' in data:
@@ -590,7 +597,7 @@ async def apply_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
                                     not_done_tasks=not_done_tasks_descriptions)
 
         await cb.message.answer(output, reply_markup=kb.member_menu_kb)
-        msg = await bot.send_message(chat_id=CONFIG['channels']['report_channel'],
+        msg = await bot.send_message(chat_id=cfg.CONFIG['channels']['report_channel'],
                                      text=output)
         await sqlite_db.add_message_id_to_report(report_id, msg.message_id)
 
@@ -825,20 +832,20 @@ async def listening_comment(msg: Message, state: FSMContext):
     user = await sqlite_db.get_user_by_id(user_id)
     surname = user[5]
     first_name = user[4]
-    user_name = user[3]
+    telegram_id = user[1]
     user_status = user[7]
-    user_output = f"{get_status_icon(user_status)} {hlink(f'{first_name} {surname}', f'https://t.me/{user_name}')} — {user_status}"
+    user_output = f"{get_status_icon(user_status)} {hlink(f'{first_name} {surname}', f'tg://user?id={telegram_id}')} — {user_status}"
     caption = f"{user_output}\n\n" \
               f"<b>Notion:</b>\n{data['notion_link']}\n\n" \
               f"💰<b>Сумма закрытия:</b> {data['check_amount']}\n\n" \
               f"💬 <b>Комментарий:</b>\n- {msg.text}"
 
     if 'file_photo' in data:
-        await bot.send_photo(chat_id=CONFIG['channels']['goals_channel'],
+        await bot.send_photo(chat_id=cfg.CONFIG['channels']['goals_channel'],
                              photo=data['file_photo'],
                              caption=caption)
     elif 'file_video' in data:
-        await bot.send_video(chat_id=CONFIG['channels']['goals_channel'],
+        await bot.send_video(chat_id=cfg.CONFIG['channels']['goals_channel'],
                              video=data['file_video'],
                              caption=caption)
     user_id = await sqlite_db.get_user_id(msg.from_id)

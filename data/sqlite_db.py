@@ -65,7 +65,9 @@ def create_scheduled_tasks_table():
         'CREATE TABLE IF NOT EXISTS scheduled_tasks ('
         'id          INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,'
         'user_id     INTEGER REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL,'
-        'description TEXT    NOT NULL)'
+        'description TEXT    NOT NULL, '
+        'date        TEXT    DEFAULT (date("now", "1 days") ) '
+        ')'
     )
 
 
@@ -255,20 +257,6 @@ async def get_users_sorted_by_points():
     return req.fetchall()
 
 
-async def get_admins():
-    req = cur.execute(
-        "SELECT surname, first_name, username FROM users WHERE role = ?", (1,)
-    )
-    return req.fetchall()
-
-
-async def get_all_users():
-    result = cur.execute(
-        "SELECT * FROM users ORDER BY surname"
-    )
-    return result.fetchall()
-
-
 async def get_user_requests(author_id: int):
     result = cur.execute(
         "SELECT * FROM requests WHERE author_id = ?", (author_id,)
@@ -345,27 +333,6 @@ async def get_report_by_id(report_id):
     return result.fetchone()
 
 
-async def update_report_done_tasks(report_id, done_tasks):
-    cur.execute(
-        "UPDATE reports SET done_tasks = ? WHERE id = ?", (done_tasks, report_id,)
-    )
-    db.commit()
-
-
-async def update_report_not_done_tasks(report_id, not_done_tasks):
-    cur.execute(
-        "UPDATE reports SET not_done_tasks = ? WHERE id = ?", (not_done_tasks, report_id,)
-    )
-    db.commit()
-
-
-async def update_report_scheduled_tasks(report_id, scheduled_tasks):
-    cur.execute(
-        "UPDATE reports SET scheduled_tasks = ? WHERE id = ?", (scheduled_tasks, report_id,)
-    )
-    db.commit()
-
-
 async def get_user_points(user_id: int):
     result = cur.execute(
         "SELECT points FROM users WHERE id = ?", (user_id,)
@@ -378,13 +345,6 @@ async def update_user_points(user_id: int, points: int):
         "UPDATE users SET points = ? WHERE id = ?", (points, user_id,)
     )
     db.commit()
-
-
-async def get_user_by_username(username: str):
-    result = cur.execute(
-        "SELECT * FROM users WHERE username = ?", (username,)
-    )
-    return result.fetchone()
 
 
 async def get_user_status_by_id(user_id: int):
@@ -401,11 +361,19 @@ async def get_user_scheduled_tasks(user_id: int):
     return result.fetchall()
 
 
+async def get_scheduled_tasks():
+    return cur.execute("SELECT * FROM scheduled_tasks").fetchall()
+
+
 async def add_scheduled_task(user_id: int, description: str):
     cur.execute(
         "INSERT INTO scheduled_tasks (user_id, description) VALUES (?, ?)", (user_id, description,)
     )
     db.commit()
+
+
+async def get_tasks_ids_scheduled_on_today():
+    return cur.execute("SELECT id FROM scheduled_tasks WHERE date = date('now')").fetchall()
 
 
 async def remove_scheduled_task_by_id(task_id: int):
@@ -488,8 +456,6 @@ async def get_user_check_amounts_per_month(user_id: int):
         "WHERE (author_id = ?) AND (date BETWEEN date(date('now', '-1 month'), '+1 day') AND date('now'))", (user_id,)
     )
     return result.fetchall()
-
-
 
 
 async def get_user_earned_per_month(user_id: int):

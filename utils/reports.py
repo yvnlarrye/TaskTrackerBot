@@ -20,7 +20,7 @@ async def print_report(report_id: int, user: tuple, earned: str,
     today_str = today.strftime("%d.%m.%Y")
     tomorrow = (today + datetime.timedelta(days=1)).strftime("%d.%m.%Y")
 
-    user_output = f"{get_status_icon(user[3])} {hlink(f'{user[1]} {user[2]}', f'https://t.me/{user[0]}')} — {user[3]}"
+    user_output = f"{get_status_icon(user[3])} {hlink(f'{user[1]} {user[2]}', f'tg://user?id={user[0]}')} — {user[3]}"
 
     done_tasks_output = ''
     if done_tasks is not None:
@@ -50,9 +50,9 @@ async def update_report_message(report_id: int):
 
         surname = user[5]
         first_name = user[4]
-        user_name = user[3]
+        telegram_id = user[1]
         user_status = user[7]
-        user = (user_name, first_name, surname, user_status,)
+        user = (telegram_id, first_name, surname, user_status,)
         earned = curr_report[2]
         done_tasks = curr_report[3]
         if done_tasks:
@@ -97,18 +97,5 @@ async def update_selected_done_tasks(cb: CallbackQuery, state: FSMContext, text:
                                 text=text,
                                 reply_markup=new_keyboard)
 
-
-async def report_tracker():
-    users = await sqlite_db.get_users()
-    for user in users:
-        user_id = user[0]
-        user_reports_count = await sqlite_db.count_user_reports_per_day(user_id)
-
-        points_amount = 1 if user_reports_count else -1
-        user_points = await sqlite_db.get_user_points(user_id)
-        user_points += points_amount
-        await sqlite_db.add_points_to_user(user_id, points_amount)
-
-        await sqlite_db.update_user_points(user_id, user_points)
 
 

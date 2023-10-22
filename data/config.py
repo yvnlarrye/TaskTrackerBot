@@ -8,6 +8,10 @@ def get_json_file_contents(file_name: str) -> dict:
     return json_data
 
 
+def get():
+    return get_json_file_contents('data/config.json')
+
+
 CONFIG = get_json_file_contents('data/config.json')
 PASS = CONFIG['password']
 REQUEST_STATUS = CONFIG['request_status']

@@ -2,7 +2,6 @@ from aiogram.dispatcher import FSMContext
 from aiogram.utils.exceptions import MessageToDeleteNotFound
 from data import sqlite_db
 from dispatcher import bot
-from states import SessionRole
 from data.config import STATUS
 import datetime
 
@@ -22,8 +21,7 @@ def formatted_users_list(users: list):
     for i, user in enumerate(users):
         surname = user[5]
         first_name = user[4]
-        username = user[3]
-        result = f'{i + 1}. {surname} {first_name} @{username}'
+        result = f'{i + 1}. {surname} {first_name}'
         formatted_users.append(result)
     return formatted_users
 
@@ -76,16 +74,6 @@ def __toggle_remove_member(btn_text: str):
     else:
         text = text.replace('🔴', '')
     return text
-
-
-async def refresh_role(state: FSMContext):
-    data = await state.get_data()
-    role_state = data['role_state']
-    await state.finish()
-    if role_state == 'admin':
-        await SessionRole.admin.set()
-    elif role_state == 'member':
-        await SessionRole.member.set()
 
 
 async def commit_report(data: dict):
@@ -144,18 +132,18 @@ def get_status_icon(status: str):
 
 
 def requestContainsUser(request: tuple, user: tuple) -> bool:
-    username = user[3]
+    telegram_id = str(user[1])
 
     addressers = request[3].split('\n')
-    if username in addressers:
+    if telegram_id in addressers:
         return True
 
     main_recipient = request[4]
-    if username == main_recipient:
+    if telegram_id == main_recipient:
         return True
 
     secondary_recipients = request[5].split('\n')
-    if username in secondary_recipients:
+    if telegram_id in secondary_recipients:
         return True
 
     return False
