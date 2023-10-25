@@ -14,6 +14,17 @@ from utils.utils import delete_prev_message, get_user_earned_total_amount
 from dispatcher import bot
 from data.config import CONFIG
 
+# from utils import tasks
+
+
+# @dp.message_handler(text='daily')
+# async def daily(msg: Message):
+#     await tasks.send_daily_report()
+#
+# @dp.message_handler(text='weekly')
+# async def weekly(msg: Message):
+#     await tasks.send_weekly_report()
+
 
 async def is_user_joined_all_chats(user_id: int):
 

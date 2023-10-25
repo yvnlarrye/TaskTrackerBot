@@ -18,7 +18,7 @@ async def send_daily_report():
         telegram_id = user[1]
         if telegram_id not in CONFIG['hidden_users']:
             check_amount_records = await sqlite_db.get_user_check_amounts_per_day(user[0])
-            user_output = f"{get_status_icon(user[7])} {hlink(f'{user[4]} {user[5]}', f'tg://user?id={user[1]}')} — {user[7]}"
+            user_output = f"{hlink(f'{user[4]} {user[5]}', f'tg://user?id={user[1]}')} — {get_status_icon(user[7])} {user[7]}"
 
             goals_count = len(check_amount_records)
 
@@ -53,8 +53,8 @@ async def send_weekly_report():
     for user in users:
         telegram_id = user[1]
         if telegram_id not in CONFIG['hidden_users']:
-            check_amount_records = await sqlite_db.get_user_check_amounts_per_day(user[0])
-            user_output = f"{get_status_icon(user[7])} {hlink(f'{user[4]} {user[5]}', f'tg://user?id={user[1]}')} — {user[7]}"
+            check_amount_records = await sqlite_db.get_user_check_amounts_per_week(user[0])
+            user_output = f"{hlink(f'{user[4]} {user[5]}', f'tg://user?id={user[1]}')} — {get_status_icon(user[7])} {user[7]}"
 
             goals_count = len(check_amount_records)
 
@@ -89,7 +89,7 @@ async def send_monthly_report():
             telegram_id = user[1]
             if telegram_id not in CONFIG['hidden_users']:
                 check_amount_records = await sqlite_db.get_user_check_amounts_per_month(user[0])
-                user_output = f"{get_status_icon(user[7])} {hlink(f'{user[4]} {user[5]}', f'tg://user?id={user[1]}')} — {user[7]}"
+                user_output = f"{hlink(f'{user[4]} {user[5]}', f'tg://user?id={user[1]}')} — {get_status_icon(user[7])} {user[7]}"
 
                 goals_count = len(check_amount_records)
 
@@ -119,7 +119,7 @@ async def send_monthly_report():
                                        text=report_output)
 
 
-async def first_reminder():
+async def first_remind():
     users = await sqlite_db.get_users()
     for user in users:
         try:
@@ -131,7 +131,7 @@ async def first_reminder():
             pass
 
 
-async def second_reminder():
+async def second_remind():
     users = await sqlite_db.get_users()
     for user in users:
         user_id = user[0]
@@ -145,7 +145,7 @@ async def second_reminder():
                 pass
 
 
-async def report_tracker():
+async def report_track():
     users = await sqlite_db.get_users()
     for user in users:
         user_id = user[0]
@@ -159,7 +159,7 @@ async def report_tracker():
         await sqlite_db.update_user_points(user_id, user_points)
 
 
-async def tasks_cleaner():
+async def tasks_clean():
     tasks = await sqlite_db.get_tasks_ids_scheduled_on_today()
     for task in tasks:
         await sqlite_db.remove_scheduled_task_by_id(task[0])
@@ -175,15 +175,15 @@ async def scheduler():
     mid_notif_time = time(hour=int(report_time['start'].split(":")[0]) + 1,
                           minute=int(report_time['start'].split(":")[1]) + 30).strftime("%H:%M")
 
-    aioschedule.every().day.at(report_time['start']).do(first_reminder)
-    aioschedule.every().day.at(mid_notif_time).do(second_reminder)
+    aioschedule.every().day.at(report_time['start']).do(first_remind)
+    aioschedule.every().day.at(mid_notif_time).do(second_remind)
 
-    aioschedule.every().day.at(report_time['end']).do(report_tracker)
+    aioschedule.every().day.at(report_time['end']).do(report_track)
 
     clean_tasks_time = time(hour=int(report_time['end'].split(":")[0]),
                             minute=int(report_time['end'].split(":")[1]) + 1).strftime("%H:%M")
 
-    aioschedule.every().day.at(clean_tasks_time).do(tasks_cleaner)
+    aioschedule.every().day.at(clean_tasks_time).do(tasks_clean)
 
     while True:
         await aioschedule.run_pending()

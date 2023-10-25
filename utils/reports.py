@@ -20,7 +20,7 @@ async def print_report(report_id: int, user: tuple, earned: str,
     today_str = today.strftime("%d.%m.%Y")
     tomorrow = (today + datetime.timedelta(days=1)).strftime("%d.%m.%Y")
 
-    user_output = f"{get_status_icon(user[3])} {hlink(f'{user[1]} {user[2]}', f'tg://user?id={user[0]}')} — {user[3]}"
+    user_output = f"{hlink(f'{user[1]} {user[2]}', f'tg://user?id={user[0]}')} — {get_status_icon(user[3])} {user[3]}"
 
     done_tasks_output = ''
     if done_tasks is not None:
@@ -96,6 +96,3 @@ async def update_selected_done_tasks(cb: CallbackQuery, state: FSMContext, text:
                                 message_id=cb.message.message_id,
                                 text=text,
                                 reply_markup=new_keyboard)
-
-
-

@@ -127,6 +127,8 @@ def get_status_icon(status: str):
             return STATUS['diamond']['icon']
         case 'Black':
             return STATUS['black']['icon']
+        case 'Red':
+            return STATUS['red']['icon']
         case _:
             return STATUS['white']['icon']
 
@@ -166,6 +168,8 @@ async def distribute_points(user_id: int, check_amount: int):
     status = await sqlite_db.get_user_status_by_id(user_id)
 
     if status == STATUS['white']['value']:
+        interval = 50000
+    elif status == STATUS['red']['value']:
         interval = 50000
     elif status == STATUS['silver']['value']:
         interval = 60000

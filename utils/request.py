@@ -100,15 +100,14 @@ async def commit_request(data: dict):
 def print_request(request_id: int, status: int, addressers: list, main_recipient: tuple,
                   secondary_recipient: tuple, text: str, date: str, video_link=None, hashtag_indices: list = None):
     addr_output = '\n'.join([
-        f"{get_status_icon(addresser[3])} {hlink(f'{addresser[1]} {addresser[2]}', f'tg://user?id={addresser[0]}')} — {addresser[3]}"
+        f"{hlink(f'{addresser[1]} {addresser[2]}', f'tg://user?id={addresser[0]}')} — {get_status_icon(addresser[3])} {addresser[3]}"
         for addresser in addressers
     ])
-    main_recipient_output = f"{get_status_icon(main_recipient[3])} {hlink(f'{main_recipient[1]} {main_recipient[2]}', f'tg://user?id={main_recipient[0]}')} — {main_recipient[3]}"
+    main_recipient_output = f"{hlink(f'{main_recipient[1]} {main_recipient[2]}', f'tg://user?id={main_recipient[0]}')} — {get_status_icon(main_recipient[3])} {main_recipient[3]}"
     if len(secondary_recipient):
         secondary_recipient_output = \
             f"<b>Дополнительный исполнитель:</b>\n" \
-            f"{get_status_icon(secondary_recipient[3])} " \
-            f"{hlink(f'{secondary_recipient[1]} {secondary_recipient[2]}', f'tg://user?id={secondary_recipient[0]}')} — " \
+            f"{hlink(f'{secondary_recipient[1]} {secondary_recipient[2]}', f'tg://user?id={secondary_recipient[0]}')} — {get_status_icon(secondary_recipient[3])} " \
             f"{secondary_recipient[3]}\n\n"
     else:
         secondary_recipient_output = ''

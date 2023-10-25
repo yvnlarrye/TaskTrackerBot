@@ -834,7 +834,7 @@ async def listening_comment(msg: Message, state: FSMContext):
     first_name = user[4]
     telegram_id = user[1]
     user_status = user[7]
-    user_output = f"{get_status_icon(user_status)} {hlink(f'{first_name} {surname}', f'tg://user?id={telegram_id}')} — {user_status}"
+    user_output = f"{hlink(f'{first_name} {surname}', f'tg://user?id={telegram_id}')} — {get_status_icon(user_status)} {user_status}"
     caption = f"{user_output}\n\n" \
               f"<b>Notion:</b>\n{data['notion_link']}\n\n" \
               f"💰<b>Сумма закрытия:</b> {data['check_amount']}\n\n" \
