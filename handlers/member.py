@@ -781,9 +781,9 @@ async def completed_goals(msg: Message, state: FSMContext):
 @dp.message_handler(state=Goals.notion_link)
 async def listening_notion_link(msg: Message, state: FSMContext):
     input_text = msg.text
-    if not (input_text.startswith('https://www.notion.so') or input_text.startswith('www.notion.so')):
+    if not input_text.startswith('https://'):
         await msg.answer('Неверный формат ввода. Попробуйте еще раз.\n'
-                         'Ссылка должна начинаться с https://www.notion.so',
+                         'Ссылка должна начинаться с https://',
                          reply_markup=kb.prev_step_reply_kb)
     else:
         await state.update_data(notion_link=input_text.strip())

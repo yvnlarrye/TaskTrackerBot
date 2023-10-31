@@ -40,7 +40,8 @@ def create_requests_table():
         'secondary_recipient  TEXT,'
         'text                 TEXT      NOT NULL,'
         'date                 TEXT      NOT NULL,'
-        'message_id           INTEGER   UNIQUE'
+        'message_id           INTEGER   UNIQUE, '
+        'creation_date        TEXT      DEFAULT (date("now") ) NOT NULL'
         ')'
     )
 
@@ -312,6 +313,13 @@ async def get_user_reports(author_id: int):
     return result.fetchall()
 
 
+async def count_user_reports(author_id: int):
+    result = cur.execute(
+        "SELECT Count() FROM reports WHERE author_id = ?", (author_id,)
+    )
+    return result.fetchone()[0]
+
+
 async def update_user_status(user_id: int, status: str):
     cur.execute(
         "UPDATE users SET status = ? WHERE id = ?", (status, user_id,)
@@ -484,3 +492,11 @@ async def count_user_reports_per_day(user_id: int):
 async def delete_points():
     cur.execute("DELETE FROM points")
     db.commit()
+
+
+async def count_user_requests_per_month(user_id: int):
+    result = cur.execute(
+        "SELECT Count() FROM requests "
+        "WHERE (author_id = ?) AND (creation_date BETWEEN date(date('now', '-1 month'), '+1 day') AND date('now'))", (user_id,)
+    )
+    return result.fetchone()[0]

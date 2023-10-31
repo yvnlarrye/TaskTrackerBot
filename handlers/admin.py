@@ -433,6 +433,7 @@ async def cancel_removing_request(cb: CallbackQuery, state: FSMContext):
 async def change_status(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     users = await sqlite_db.get_users()
+    users = [user for user in users if user[1] not in CONFIG['hidden_users']]
     await msg.answer(text='Выберите участника, у которого хотите изменить статус:',
                      reply_markup=(await kb.select_member_to_edit_status_kb(users)))
     await state.update_data(curr_users=users)

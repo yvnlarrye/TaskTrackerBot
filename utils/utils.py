@@ -140,14 +140,21 @@ def requestContainsUser(request: tuple, user: tuple) -> bool:
     if telegram_id in addressers:
         return True
 
-    main_recipient = request[4]
-    if telegram_id == main_recipient:
+    if telegram_id == request[4]:
         return True
 
-    secondary_recipients = request[5].split('\n')
-    if telegram_id in secondary_recipients:
+    if telegram_id == request[5]:
         return True
 
+    return False
+
+
+def is_user_recipient(request: tuple, user: tuple) -> bool:
+    telegram_id = str(user[1])
+    if telegram_id == request[4]:
+        return True
+    if telegram_id == request[5]:
+        return True
     return False
 
 

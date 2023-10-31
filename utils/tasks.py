@@ -1,4 +1,4 @@
-from datetime import timedelta, time
+from datetime import timedelta, time, datetime
 
 import aioschedule
 import asyncio
@@ -8,7 +8,8 @@ from aiogram.utils.markdown import hlink
 from data import sqlite_db
 from data.config import CONFIG
 from dispatcher import bot
-from utils.utils import get_status_icon, curr_datetime
+from utils.utils import get_status_icon, curr_datetime, is_user_recipient
+from calendar import monthrange
 
 
 async def send_daily_report():
@@ -36,8 +37,18 @@ async def send_daily_report():
             for points_record in points_records:
                 total_points += points_record[0]
 
+            requests = await sqlite_db.get_all_requests()
+            reqs_to_me_count = 0
+            reqs_from_me_count = 0
+            for req in requests:
+                if is_user_recipient(req, user) and req[2] == 1:
+                    reqs_to_me_count += 1
+                if req[2] == 1 and user[0] == req[1]:
+                    reqs_from_me_count += 1
+
             report_output = f"{user_output}\n" \
-                            f"💸{total_earned} / 💯{total_points} / 🎯{goals_count} на {total_check_amount}₽"
+                            f"💸{total_earned} / 💯{total_points} / 🎯{goals_count} на {total_check_amount}₽\n" \
+                            f"Незакрытые запросы тебе/твои: {reqs_to_me_count} / {reqs_from_me_count}"
 
             result.append(report_output)
     if len(users):
@@ -72,8 +83,18 @@ async def send_weekly_report():
             for points_record in points_records:
                 total_points += points_record[0]
 
+            requests = await sqlite_db.get_all_requests()
+            reqs_to_me_count = 0
+            reqs_from_me_count = 0
+            for req in requests:
+                if is_user_recipient(req, user) and req[2] == 1:
+                    reqs_to_me_count += 1
+                if req[2] == 1 and user[0] == req[1]:
+                    reqs_from_me_count += 1
+
             report_output = f"{user_output}\n" \
-                            f"💸{total_earned} / 💯{total_points} / 🎯{goals_count} на {total_check_amount}₽"
+                            f"💸{total_earned} / 💯{total_points} / 🎯{goals_count} на {total_check_amount}₽\n" \
+                            f"Незакрытые запросы тебе/твои: {reqs_to_me_count} / {reqs_from_me_count}"
 
             result.append(report_output)
     if len(users):
@@ -107,12 +128,30 @@ async def send_monthly_report():
                 for points_record in points_records:
                     total_points += points_record[0]
 
-                report_output = f"<b>Месяц:</b> {curr_datetime().strftime('%B, %Y')}\n\n" \
+                created_requests_count = await sqlite_db.count_user_requests_per_month(user[0])
+
+                done_requests_count = 0
+                requests = await sqlite_db.get_all_requests()
+                for req in requests:
+                    if is_user_recipient(user, req) and req[2] == 2:
+                        done_requests_count += 1
+
+                reports_count = await sqlite_db.count_user_reports(user[0])
+
+                current_year = datetime.now().year
+                current_month = datetime.now().month
+                days = monthrange(current_year, current_month)[1]
+
+                report_output = f"<b>Месяц:</b> {curr_datetime().strftime('%B, %Y')}\n\n" \ 
                                 f"{user_output}\n\n" \
                                 f"💸 Заработал: {total_earned}\n" \
                                 f"✅ Заработал баллов: {total_points}\n" \
                                 f"🎯 Закрыл целей: {goals_count}\n" \
-                                f"💰 Целей закрыто на сумму: {total_check_amount}"
+                                f"💰 Целей закрыто на сумму: {total_check_amount}\n" \
+                                f"📝 Создано запросов: {created_requests_count}\n" \
+                                f"📝 Решено запросов: {done_requests_count}\n" \
+                                f"📩 Заполнено отчётов: {reports_count}\n" \
+                                f"📩 Пропущено отчётов: {days - reports_count}"
 
                 await bot.send_message(chat_id=CONFIG['channels']['period_reports'],
                                        reply_to_message_id=CONFIG['period_reports']['monthly']['thread_id'],
