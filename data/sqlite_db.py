@@ -500,3 +500,9 @@ async def count_user_requests_per_month(user_id: int):
         "WHERE (author_id = ?) AND (creation_date BETWEEN date(date('now', '-1 month'), '+1 day') AND date('now'))", (user_id,)
     )
     return result.fetchone()[0]
+
+
+async def clear_reports():
+    cur.execute("DELETE FROM reports")
+    db.commit()
+

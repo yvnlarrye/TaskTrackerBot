@@ -44,7 +44,7 @@ admin_menu_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     KeyboardButton('🏠 Выйти'),
     KeyboardButton('↪️ Каналы')
 ).add(
-    KeyboardButton('Сбросить баллы')
+    KeyboardButton('❌ Сбросить статистику ❌')
 )
 
 points_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(

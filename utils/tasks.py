@@ -142,7 +142,7 @@ async def send_monthly_report():
                 current_month = datetime.now().month
                 days = monthrange(current_year, current_month)[1]
 
-                report_output = f"<b>Месяц:</b> {curr_datetime().strftime('%B, %Y')}\n\n" \ 
+                report_output = f"<b>Месяц:</b> {curr_datetime().strftime('%B, %Y')}\n\n" \
                                 f"{user_output}\n\n" \
                                 f"💸 Заработал: {total_earned}\n" \
                                 f"✅ Заработал баллов: {total_points}\n" \

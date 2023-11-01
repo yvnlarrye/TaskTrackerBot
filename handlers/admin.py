@@ -487,7 +487,7 @@ async def finish_user_status_edition(cb: CallbackQuery, state: FSMContext):
     await admin_reset(state)
 
 
-@dp.message_handler(text='Сбросить баллы', state=SessionRole.admin)
+@dp.message_handler(text='❌ Сбросить статистику ❌', state=SessionRole.admin)
 async def reset_all_users_points(msg: Message):
     await msg.delete()
     keyboard = InlineKeyboardMarkup().add(
@@ -505,6 +505,7 @@ async def approve_reset_points(cb: CallbackQuery):
     users = await sqlite_db.get_users()
     for user in users:
         await sqlite_db.update_user_points(user[0], 0)
+    await sqlite_db.clear_reports()
     await sqlite_db.delete_points()
     await cb.message.answer('Баллы успешно обновлены ✅',
                             reply_markup=kb.admin_menu_kb)
