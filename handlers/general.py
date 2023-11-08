@@ -1,5 +1,7 @@
 from aiogram.dispatcher import FSMContext
 from aiogram.types import Message, CallbackQuery
+from aiogram.utils.exceptions import BotKicked
+
 from data.config import PASS
 from dispatcher import dp
 from keyboards.keyboards import permission_denied_message
@@ -72,7 +74,7 @@ async def access_layer(user_id: int, state: FSMContext):
                                        text='🚫 У вас нет доступа к боту. Свяжитесь с администратором.')
         else:
             await send_permission_denied_message(to_user_id=user_id)
-    except ChatNotFound:
+    except (ChatNotFound, BotKicked):
         await bot.send_message(chat_id=user_id,
                                text='Для корректной работы добавьте бота во все подключенные чаты.')
 

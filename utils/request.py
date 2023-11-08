@@ -202,6 +202,7 @@ async def update_request_message(request_id, video_link=None, hashtag_indices: l
 
 
 async def update_req_recipients_points(req, update_mode: str):
+    coefficient = 1
     sign = None
     if update_mode == '+':
         sign = 1
@@ -211,16 +212,16 @@ async def update_req_recipients_points(req, update_mode: str):
     if sign is not None:
         main_recipient_id = await sqlite_db.get_user_id(int(req[4]))
         main_recipient_rate = await sqlite_db.get_user_points(main_recipient_id)
-        main_recipient_rate += 1 * sign
-        await sqlite_db.add_points_to_user(main_recipient_id, 1 * sign)
+        main_recipient_rate += coefficient * 2 * sign
+        await sqlite_db.add_points_to_user(main_recipient_id, coefficient * 2 * sign)
         await sqlite_db.update_user_points(main_recipient_id, main_recipient_rate)
 
         secondary_recipient = req[5]
         if secondary_recipient != '':
             secondary_recipient_id = await sqlite_db.get_user_id(int(req[5]))
             recipient_rate = await sqlite_db.get_user_points(secondary_recipient_id)
-            recipient_rate += 0.5 * sign
-            await sqlite_db.add_points_to_user(secondary_recipient_id, 0.5 * sign)
+            recipient_rate += coefficient * sign
+            await sqlite_db.add_points_to_user(secondary_recipient_id, coefficient * sign)
             await sqlite_db.update_user_points(secondary_recipient_id, recipient_rate)
 
 

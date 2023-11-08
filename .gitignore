@@ -1,5 +1,5 @@
 /token_drive_v3.pickle
 /test.py
-/.env
+#.env
 /venv/
 /data/task_tracker_db.db

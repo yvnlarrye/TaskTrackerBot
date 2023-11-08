@@ -1,9 +1,9 @@
 {
     "channels": {
-        "report_channel": -1001980530409,
-        "request_channel": -1001901646542,
-        "goals_channel": -1001859418472,
-        "general": -1001534514369,
+        "report_channel": -1001982368833,
+        "request_channel": -1002004513229,
+        "goals_channel": -1001870833490,
+        "general": -1001527708330,
         "period_reports": -1001960402798,
         "knowledge_base": -1001816334457
     },
@@ -85,12 +85,12 @@
             "thread_id": 5
         }
     },
-    "check_subscribes": false,
+    "check_subscribes": true,
     "hidden_users": [
-        445787736, 684074727
+        445787736, 684074727, 342740818
     ],
     "report_time": {
-        "start": "15:00",
-        "end": "18:00"
+        "start": "18:00",
+        "end": "20:00"
     }
 }
