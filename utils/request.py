@@ -87,6 +87,7 @@ async def commit_request(data: dict):
         secondary_recipient = ''
     text = data['text']
     date = data['date']
+    serial_number = data['serial_number']
 
     await sqlite_db.add_request(author_id=author_id,
                                 status=1,
@@ -94,10 +95,11 @@ async def commit_request(data: dict):
                                 main_recipient=main_recipient,
                                 secondary_recipient=secondary_recipient,
                                 text=text,
-                                date=date)
+                                date=date,
+                                serial_number=serial_number)
 
 
-def print_request(request_id: int, status: int, addressers: list, main_recipient: tuple,
+def print_request(serial_number: int, status: int, addressers: list, main_recipient: tuple,
                   secondary_recipient: tuple, text: str, date: str, video_link=None, hashtag_indices: list = None):
     addr_output = '\n'.join([
         f"{hlink(f'{addresser[1]} {addresser[2]}', f'tg://user?id={addresser[0]}')} — {get_status_icon(addresser[3])} {addresser[3]}"
@@ -114,14 +116,14 @@ def print_request(request_id: int, status: int, addressers: list, main_recipient
 
     video_link_output = ''
     if video_link:
-        video_link_output = '\n\n' + hlink('Запись с Zoom', video_link)
+        video_link_output = '\n\n' + hlink('Запись (Zoom, YouTube или др.)', video_link)
 
     hashtags_output = ''
     if hashtag_indices:
         hashtags = CONFIG['hashtags']
         hashtags_output = '\n\n<b>Теги:</b>\n' + ' '.join([hashtags[i]['name'] for i in hashtag_indices])
 
-    result = f"Запрос #{request_id}\n\n" \
+    result = f"Запрос #{serial_number}\n\n" \
              f"<b>Статус:</b>\n" \
              f"{status}\n" \
              f"\n" \
@@ -160,6 +162,7 @@ async def update_request_message(request_id, video_link=None, hashtag_indices: l
         addressers = curr_request[3].split('\n')
         main_recipient = curr_request[4].strip()
         secondary_recipient = curr_request[5].strip()
+        serial_number = curr_request[10]
 
         addressers_transfer_data = []
         for telegram_id in addressers:
@@ -182,7 +185,7 @@ async def update_request_message(request_id, video_link=None, hashtag_indices: l
         text = curr_request[6]
         date = curr_request[7]
         message_id = curr_request[8]
-        new_output = print_request(request_id, req_status, addressers_transfer_data, main_recipient_transfer_data,
+        new_output = print_request(serial_number, req_status, addressers_transfer_data, main_recipient_transfer_data,
                                    secondary_recipient_transfer_data, text, date, video_link, hashtag_indices)
         try:
             await bot.edit_message_text(text=new_output, chat_id=CONFIG['channels']['request_channel'], message_id=message_id)
@@ -218,7 +221,7 @@ async def update_req_recipients_points(req, update_mode: str):
 
         secondary_recipient = req[5]
         if secondary_recipient != '':
-            secondary_recipient_id = await sqlite_db.get_user_id(int(req[5]))
+            secondary_recipient_id = await sqlite_db.get_user_id(int(secondary_recipient))
             recipient_rate = await sqlite_db.get_user_points(secondary_recipient_id)
             recipient_rate += coefficient * sign
             await sqlite_db.add_points_to_user(secondary_recipient_id, coefficient * sign)

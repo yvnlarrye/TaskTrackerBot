@@ -176,7 +176,7 @@ def __list_of_elements_kb(elements: list):
 
 
 async def users_requests_kb(requests: list):
-    requests_ids = [f'Запрос #{req[0]} {request_status_str(req[2])[0]}' for req in requests]
+    requests_ids = [f'Запрос #{req[10]} {request_status_str(req[2])[0]}' for req in requests]
     return __list_of_elements_kb(requests_ids)
 
 

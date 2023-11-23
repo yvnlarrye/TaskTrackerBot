@@ -34,7 +34,7 @@ async def print_report(report_id: int, user: tuple, earned: str,
     result = f"Отчёт #{report_id}\n\n" \
              f"{user_output}\n\n" \
              f"<b>Дата:</b> {today_str}\n\n" \
-             f"<b>Заработал:</b> - {earned} руб.\n\n" \
+             f"<b>Заработал:</b> {earned} руб.\n\n" \
              f"{done_tasks_output}" \
              f"{not_done_tasks_output}" \
              f"📝<b>План на</b> - {tomorrow}\n\n" \

@@ -507,6 +507,7 @@ async def approve_reset_points(cb: CallbackQuery):
         await sqlite_db.update_user_points(user[0], 0)
     await sqlite_db.clear_reports()
     await sqlite_db.delete_points()
+    await sqlite_db.update_last_request_serial_number()
     await cb.message.answer('Баллы успешно обновлены ✅',
                             reply_markup=kb.admin_menu_kb)
 

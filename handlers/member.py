@@ -9,8 +9,9 @@ from aiogram.types import (
 )
 from aiogram.utils.markdown import hlink
 
+from data.config import CONFIG
 from dispatcher import dp, bot
-from google.google_manager import upload_file_to_google_drive
+from google.google_manager import *
 from keyboards import keyboards as kb
 from utils.reports import (
     print_report, update_selected_done_tasks
@@ -23,7 +24,7 @@ from utils.utils import (
     format_recipients, format_addressers, commit_report, delete_prev_message, get_status_icon, distribute_points
 )
 from states import SessionRole, CreateRequest, CreateReport, UserEdition, EditRequest, EditReport, Goals
-from datetime import datetime, time
+from datetime import datetime, time, date
 
 from utils.validators import validate_date
 from data import sqlite_db
@@ -168,12 +169,14 @@ async def listening_request_date(msg: Message, state: FSMContext):
 
 @dp.callback_query_handler(text='confirm_request', state=CreateRequest.date)
 async def confirm_creating_request(cb: CallbackQuery, state: FSMContext):
-    await state.update_data(author_telegram_id=cb.from_user.id)
+    last_req_serial_number = await sqlite_db.get_last_request_serial_number()
+    serial_number = last_req_serial_number + 1
+    await state.update_data(serial_number=serial_number, author_telegram_id=cb.from_user.id)
     data = await state.get_data()
     await commit_request(data)
     author_id = await sqlite_db.get_user_id(cb.from_user.id)
-    request_id = (await sqlite_db.get_user_last_request_id(author_id))[0]
-    data = await state.get_data()
+    request_id = await sqlite_db.get_user_last_request_id(author_id)
+
     users = data['curr_users']
     addressers = [
         (users[user_index][1], users[user_index][4], users[user_index][5], users[user_index][7],)
@@ -188,7 +191,7 @@ async def confirm_creating_request(cb: CallbackQuery, state: FSMContext):
         )
     else:
         secondary_recipient = ()
-    output = print_request(request_id=request_id,
+    output = print_request(serial_number=serial_number,
                            status=cfg.REQUEST_STATUS['in_progress'],
                            addressers=addressers,
                            main_recipient=main_recipient,
@@ -283,8 +286,13 @@ async def edit_request_status(cb: CallbackQuery, state: FSMContext):
         return
 
     if status == 2 and request_status != 2:
-        await cb.message.answer('Загрузите <b>видео</b> 📺 с зума или прикрепите иной <b>файл</b> 📄:',
-                                reply_markup=kb.edit_request_status_kb)
+        m = await cb.message.answer(
+            f'Отправь ссылку на <b>видео</b> 📺 с записью зума c Google диска или YouTube. Или загрузи сюда любой <b>файл</b> 📄 до 20 мб.\n\n'
+            f'Не знаешь как залить видео на Google диск или YouTube и поделиться рабочей ссылкой? Смотри!\n'
+            f'{hlink("Как загрузить видео на YouTube и поделиться", "https://drive.google.com/file/d/1e-qGRUUFCGDAxJruULwxEz6O8AvTWIdl/view?usp=drive_link")}\n'
+            f'{hlink("Как загрузить видео на Google Disk и поделиться", "https://drive.google.com/file/d/1B5rZBA565B85ocj2x3Q3LQVQL6s5KPPi/view")}',
+            reply_markup=kb.edit_request_status_kb)
+        await state.update_data(msg=m)
         await EditRequest.attach_file.set()
         return
 
@@ -314,36 +322,56 @@ async def skip_attaching_file(cb: CallbackQuery, state: FSMContext):
     await member_reset(state)
 
 
-@dp.message_handler(state=EditRequest.attach_file, content_types=['video', 'document'])
-async def listen_request_video(msg: Message, state: FSMContext):
-    if msg.video:
-        file_content = msg.video
-    elif msg.document:
-        file_content = msg.document
-    else:
-        await msg.answer('Недопустимый тип файла.',
-                         reply_markup=kb.member_menu_kb)
-        await member_reset(state)
-        return
-
-    m = await msg.answer('Подождите, идёт загрузка...')
-    file = await bot.get_file(file_content.file_id)
-    file_extension = file_content.file_name.split('.')[-1]
-    file_path = f"temp/file.{file_extension}"
-    await bot.download_file(file.file_path, file_path)
-
-    user = await sqlite_db.get_user_by_id(await sqlite_db.get_user_id(msg.from_id))
+@dp.message_handler(state=EditRequest.attach_file, content_types=['video', 'document', 'text'])
+async def listen_request_content(msg: Message, state: FSMContext):
+    await msg.delete()
+    file_content = None
+    video_shared_link = None
 
     data = await state.get_data()
     curr_request = data['req']
     request_id = curr_request[0]
-    file_name = f"{msg.from_id}_{'video' if msg.video else 'document'}_{request_id}.{file_extension}"
+    serial_number = curr_request[10]
 
-    video_shared_link = upload_file_to_google_drive(user, file_name, file_path)
+    if msg.text:
+        if msg.text.startswith("https://"):
+            video_shared_link = msg.text
+        else:
+            err_msg = await msg.answer("Неверный формат ссылки.")
+            await asyncio.sleep(2)
+            await err_msg.delete()
+            return
+    elif msg.video:
+        file_content = msg.video
+    elif msg.document:
+        file_content = msg.document
+    else:
+        await msg.answer('Недопустимый формат.',
+                         reply_markup=kb.member_menu_kb)
+        await member_reset(state)
+        return
 
-    os.remove(file_path)
+    if file_content:
+        m = await msg.answer('Подождите, идёт загрузка...')
+        file = await bot.get_file(file_content.file_id)
+        file_extension = file_content.file_name.split('.')[-1]
+        file_path = f"temp/file.{file_extension}"
+        try:
+            await bot.download_file(file.file_path, file_path)
+            user = await sqlite_db.get_user_by_id(await sqlite_db.get_user_id(msg.from_id))
+            file_name = f"{msg.from_id}_{'video' if msg.video else 'document'}_{serial_number}.{file_extension}"
+            video_shared_link = upload_request_content(user, file_name, file_path, CONFIG['video_folder_id'])
+            os.remove(file_path)
+        except Exception as e:
+            print(e)
+            err_msg = await msg.answer("Файл слишком большой, попробуйте другой способ.")
+            await asyncio.sleep(2)
+            await err_msg.delete()
+            return
+        await m.delete()
 
-    await m.delete()
+    await delete_prev_message(msg.from_id, state)
+
     message_text = 'Добавьте подходящие хештеги:'
     await state.update_data(message_text=message_text,
                             video_shared_link=video_shared_link,
@@ -351,7 +379,6 @@ async def listen_request_video(msg: Message, state: FSMContext):
     await msg.answer(message_text,
                      reply_markup=kb.hashtag_kb())
     await EditRequest.add_hashtags.set()
-    await msg.delete()
 
 
 @dp.callback_query_handler(Text(startswith="task_"), state=EditRequest.add_hashtags)
@@ -414,7 +441,7 @@ async def confirm_edit_recipients(cb: CallbackQuery, state: FSMContext):
         request_id = data['req'][0]
         main_recipient = str(users[data['main_recipient']][1])
         if data['secondary_recipient'] is not None:
-            secondary_recipient = str(users[data['secondary_recipient']][3])
+            secondary_recipient = str(users[data['secondary_recipient']][1])
         else:
             secondary_recipient = ''
         await sqlite_db.update_request_recipients(request_id, main_recipient, secondary_recipient)
@@ -465,12 +492,13 @@ async def edit_date(msg: Message, state: FSMContext):
 async def add_earned(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     report_time = cfg.get()['report_time']
+    time_restriction = cfg.get()['time_restriction']
     left_time_parts = report_time['start'].split(':')
     left_time = time(hour=int(left_time_parts[0]), minute=int(left_time_parts[1]))
     right_time_parts = report_time['end'].split(':')
     right_time = time(hour=int(right_time_parts[0]), minute=int(right_time_parts[1]))
 
-    if left_time <= datetime.now().time() < right_time:
+    if (left_time <= datetime.now().time() < right_time) or not time_restriction:
         m = await msg.answer('Сколько заработали 💰₽ за сегодняшний день?\n'
                              'Введите значение в следующем формате: 150000',
                              reply_markup=kb.prev_step_reply_kb)
@@ -483,29 +511,64 @@ async def add_earned(msg: Message, state: FSMContext):
 
 
 @dp.message_handler(state=CreateReport.earned)
-async def enter_done_tasks(msg: Message, state: FSMContext):
+async def enter_screenshots(msg: Message, state: FSMContext):
     try:
         result = int(msg.text)
+        await msg.delete()
         await delete_prev_message(msg.from_id, state)
+        message = await msg.answer(text='Добавьте скриншоты:\n'
+                                        '(Отправьте фото по одному, а в конце нажмите "Подтвердить")',
+                                   reply_markup=kb.apply_tasks_kb())
+        await state.update_data(msg_id=message.message_id, earned=result, photos=[])
+        await CreateReport.screenshots.set()
+    except ValueError:
+        await msg.answer('Неверный формат ввода. Попробуйте еще раз.')
 
-        user_id = await sqlite_db.get_user_id(msg.from_id)
+
+@dp.message_handler(content_types=['photo'], state=CreateReport.screenshots)
+async def listen_screenshots(msg: Message, state: FSMContext):
+    if msg.photo:
+        await msg.delete()
+        data = await state.get_data()
+        photos = data['photos']
+        photo_id = msg.photo[-1].file_id
+        file_info = await bot.get_file(photo_id)
+        file_extension = file_info.file_path.split('photos/')[1].split('.')[1]
+        file_name = f'{photo_id}.{file_extension}'
+        await msg.photo[-1].download(destination_file=f'temp/{file_name}')
+        photos.append(file_name)
+        append_text = '\n'.join([f'- photo_{i + 1}' for i, photo in enumerate(photos)])
+        await bot.edit_message_text(text='Добавьте скриншоты:\n'
+                                         '(Отправьте фото по одному, а в конце нажмите "Подтвердить")\n'
+                                         f'{append_text}',
+                                    chat_id=msg.from_id,
+                                    message_id=data['msg_id'],
+                                    reply_markup=kb.apply_tasks_kb())
+        await state.update_data(photos=photos)
+
+
+@dp.callback_query_handler(text='apply_tasks', state=CreateReport.screenshots)
+async def enter_done_tasks(cb: CallbackQuery, state: FSMContext):
+    try:
+        await cb.message.delete()
+        user_id = await sqlite_db.get_user_id(cb.message.chat.id)
         user_scheduled_tasks = await sqlite_db.get_user_scheduled_tasks(user_id)
         if len(user_scheduled_tasks):
-            await state.update_data(earned=result, user_id=msg.from_id, curr_tasks=user_scheduled_tasks,
+            await state.update_data(user_id=cb.message.chat.id, curr_tasks=user_scheduled_tasks,
                                     done_tasks_indices=[])
-            await msg.answer('✅ Выберите задачи, которые сегодня выполнили:\n'
-                             '(Не помеченные задачи автоматически будут иметь статус не выполненных)',
-                             reply_markup=kb.scheduled_tasks_kb(user_scheduled_tasks))
+            await cb.message.answer('✅ Выберите задачи, которые сегодня выполнили:\n'
+                                    '(Не помеченные задачи автоматически будут иметь статус не выполненных)',
+                                    reply_markup=kb.scheduled_tasks_kb(user_scheduled_tasks))
             await CreateReport.list_of_done_tasks.set()
         else:
-            message = await msg.answer('📝 Введите список запланированных на завтра задач:\n'
-                                       '(Отправьте задачи по одной, а в конце нажмите "Подтвердить")',
-                                       reply_markup=kb.apply_tasks_kb())
-            await state.update_data(msg_id=message.message_id, user_id=msg.from_id, earned=result,
+            message = await cb.message.answer('📝 Введите список запланированных на завтра задач:\n'
+                                              '(Отправьте задачи по одной, а в конце нажмите "Подтвердить")',
+                                              reply_markup=kb.apply_tasks_kb())
+            await state.update_data(msg_id=message.message_id, user_id=cb.message.chat.id,
                                     new_scheduled_tasks=[])
             await CreateReport.list_of_scheduled_tasks.set()
     except ValueError:
-        await msg.answer('Неверный формат ввода. Попробуйте еще раз.')
+        await cb.message.answer('Неверный формат ввода. Попробуйте еще раз.')
 
 
 @dp.callback_query_handler(Text(startswith='task_'), state=CreateReport.list_of_done_tasks)
@@ -577,7 +640,7 @@ async def apply_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
         user_status = user[7]
         earned = data['earned']
 
-        user = (telegram_id, first_name, surname, user_status,)
+        user_transfer = (telegram_id, first_name, surname, user_status,)
 
         done_tasks_descriptions = None
         if 'done_tasks' in data:
@@ -590,11 +653,25 @@ async def apply_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
             not_done_tasks_descriptions = [task[2] for task in not_done_tasks]
 
         output = await print_report(report_id=report_id,
-                                    user=user,
+                                    user=user_transfer,
                                     earned=earned,
                                     scheduled_tasks=new_scheduled_tasks,
                                     done_tasks=done_tasks_descriptions,
                                     not_done_tasks=not_done_tasks_descriptions)
+
+        data = await state.get_data()
+        photo_files = data['photos']
+
+        for i, file in enumerate(photo_files):
+            file_loc = f'temp/{file}'
+            curr_date = date.today().strftime("%d.%m.%Y")
+            file_extension = file.split('.')[1]
+            file_name = f'{report_id}_{first_name}_{surname}_{curr_date}_{i + 1}.{file_extension}'
+            upload_report_photo(user=user,
+                                file_name=file_name,
+                                file_loc=file_loc,
+                                root_folder_id=CONFIG['screenshots_folder_id'], )
+            os.remove(file_loc)
 
         await cb.message.answer(output, reply_markup=kb.member_menu_kb)
         msg = await bot.send_message(chat_id=cfg.CONFIG['channels']['report_channel'],
@@ -606,167 +683,6 @@ async def apply_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
         m = await cb.message.answer('Необходимо ввести хотя бы одну задачу.')
         await asyncio.sleep(2)
         await m.delete()
-
-
-# @dp.message_handler(text='✏️ Ред. отчётность', state=SessionRole.member)
-# async def edit_user_report(msg: Message, state: FSMContext):
-#     await delete_prev_message(msg.from_id, state)
-#     user_id = await sqlite_db.get_user_id(msg.from_id)
-#     await state.update_data(role_state=(await state.get_state()).split(':')[1])
-#     reports = await sqlite_db.get_user_reports(user_id)
-#     if len(reports):
-#         await state.update_data(user_id=user_id, reps=reports)
-#         await msg.answer('Выберите отчёт для редактирования:',
-#                          reply_markup=(await kb.member_reports_kb(reports)))
-#         await EditReport.select_member_report.set()
-#     else:
-#         await msg.answer('Этот участник еще не создал ни одного отчёта.',
-#                          reply_markup=kb.prev_step_reply_kb)
-#
-#
-# @dp.callback_query_handler(Text(startswith='elm_'), state=EditReport.select_member_report)
-# async def select_member_report(cb: CallbackQuery, state: FSMContext):
-#     await cb.message.delete()
-#     rep_index = int(cb.data[4:])
-#     await state.update_data(rep=(await state.get_data())['reps'][rep_index])
-#     await cb.message.answer('Выберите поле отчёта, которое хотите отредактировать:',
-#                             reply_markup=(await kb.report_headers_kb()))
-#     await EditReport.select_report_headers.set()
-#
-#
-# @dp.callback_query_handler(Text(startswith='elm_'), state=EditReport.select_report_headers)
-# async def select_report_headers(cb: CallbackQuery, state: FSMContext):
-#     header_index = int(cb.data[4:])
-#     await cb.message.delete()
-#     match header_index:
-#         case 0:
-#             m = await cb.message.answer('Сколько заработали 💰₽ за сегодняшний день?\n'
-#                                         'Введите значение в следующем формате: 150000',
-#                                         reply_markup=kb.prev_step_reply_kb)
-#             await state.update_data(msg=m)
-#             await EditReport.earned.set()
-#         case 1:
-#             message = await cb.message.answer('✅ Введите список выполненных сегодня задач (по одной):',
-#                                               reply_markup=kb.apply_tasks_kb())
-#             await state.update_data(done_tasks_list=[], message_id=message.message_id)
-#             await EditReport.list_of_done_tasks.set()
-#         case 2:
-#             message = await cb.message.answer('❌ Введите список не выполненных сегодня задач (по одной):',
-#                                               reply_markup=kb.apply_tasks_kb())
-#             await state.update_data(not_done_tasks_list=[], message_id=message.message_id)
-#             await EditReport.list_of_not_done_tasks.set()
-#         case 3:
-#             message = await cb.message.answer('📝 Введите список запланированных на завтра задач (по одной):',
-#                                               reply_markup=kb.apply_tasks_kb())
-#             await state.update_data(scheduled_tasks_list=[], message_id=message.message_id)
-#             await EditReport.list_of_scheduled_tasks.set()
-#
-#
-# @dp.message_handler(state=EditReport.earned)
-# async def edit_phone_time(msg: Message, state: FSMContext):
-#     try:
-#         result = int(msg.text)
-#         await delete_prev_message(msg.from_id, state)
-#         data = await state.get_data()
-#         report = data['rep']
-#         report_id = report[0]
-#         await sqlite_db.update_report_earned(report_id, result)
-#
-#         await update_report_message(report_id)
-#
-#         await msg.answer('<b>Заработанная сумма</b> успешно изменена',
-#                          reply_markup=kb.member_menu_kb)
-#         await member_reset(state)
-#
-#     except ValueError:
-#         await msg.answer('Неверный формат ввода. Попробуйте еще раз.')
-#
-#
-# @dp.message_handler(state=EditReport.list_of_done_tasks)
-# async def edit_list_of_done_tasks(msg: Message, state: FSMContext):
-#     data = await state.get_data()
-#     done_tasks_list = data['done_tasks_list']
-#     done_tasks_list.append(msg.text)
-#     await state.update_data(done_tasks_list=done_tasks_list)
-#     append_text = '\n'.join(['- ' + task for task in data['done_tasks_list']])
-#     await bot.edit_message_text(text=f"✅ Введите список выполненных сегодня задач (по одной):\n\n"
-#                                      f"{append_text}",
-#                                 chat_id=msg.from_id,
-#                                 message_id=data['message_id'],
-#                                 reply_markup=kb.apply_tasks_kb())
-#
-#
-# @dp.callback_query_handler(text='apply_tasks', state=EditReport.list_of_done_tasks)
-# async def apply_edition_done_tasks(cb: CallbackQuery, state: FSMContext):
-#     await cb.message.delete()
-#     data = await state.get_data()
-#     done_tasks = '\n'.join(data['done_tasks_list'])
-#     report_id = data['rep'][0]
-#     await sqlite_db.update_report_done_tasks(report_id, done_tasks)
-#
-#     await update_report_message(report_id)
-#
-#     await cb.message.answer('Выполненные задания успешно изменены',
-#                             reply_markup=kb.member_menu_kb)
-#     await member_reset(state)
-#
-#
-# @dp.message_handler(state=EditReport.list_of_not_done_tasks)
-# async def edit_list_of_not_done_tasks(msg: Message, state: FSMContext):
-#     data = await state.get_data()
-#     not_done_tasks_list = data['not_done_tasks_list']
-#     not_done_tasks_list.append(msg.text)
-#     await state.update_data(not_done_tasks_list=not_done_tasks_list)
-#     append_text = '\n'.join(['- ' + task for task in data['not_done_tasks_list']])
-#     await bot.edit_message_text(text=f"❌ Введите список не выполненных сегодня задач (по одной):\n\n"
-#                                      f"{append_text}",
-#                                 chat_id=msg.from_id,
-#                                 message_id=data['message_id'],
-#                                 reply_markup=kb.apply_tasks_kb())
-#
-#
-# @dp.callback_query_handler(text='apply_tasks', state=EditReport.list_of_not_done_tasks)
-# async def apply_edition_not_done_tasks(cb: CallbackQuery, state: FSMContext):
-#     await cb.message.delete()
-#     data = await state.get_data()
-#     not_done_tasks = '\n'.join(data['not_done_tasks_list'])
-#     report_id = data['rep'][0]
-#     await sqlite_db.update_report_not_done_tasks(report_id, not_done_tasks)
-#
-#     await update_report_message(report_id)
-#
-#     await cb.message.answer('<b>Не выполненные задания</b> успешно изменены',
-#                             reply_markup=kb.member_menu_kb)
-#     await member_reset(state)
-#
-#
-# @dp.message_handler(state=EditReport.list_of_scheduled_tasks)
-# async def edit_list_of_scheduled_tasks(msg: Message, state: FSMContext):
-#     data = await state.get_data()
-#     scheduled_tasks = data['scheduled_tasks_list']
-#     scheduled_tasks.append(msg.text)
-#     await state.update_data(scheduled_tasks_list=scheduled_tasks)
-#     append_text = '\n'.join(['- ' + task for task in data['scheduled_tasks_list']])
-#     await bot.edit_message_text(text=f"📝 Введите список запланированных на завтра задач (по одной):\n\n"
-#                                      f"{append_text}",
-#                                 chat_id=msg.from_id,
-#                                 message_id=data['message_id'],
-#                                 reply_markup=kb.apply_tasks_kb())
-#
-#
-# @dp.callback_query_handler(text='apply_tasks', state=EditReport.list_of_scheduled_tasks)
-# async def apply_edition_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
-#     await cb.message.delete()
-#     data = await state.get_data()
-#     scheduled_tasks = '\n'.join(data['scheduled_tasks_list'])
-#     report_id = data['rep'][0]
-#     await sqlite_db.update_report_scheduled_tasks(report_id, scheduled_tasks)
-#
-#     await update_report_message(report_id)
-#
-#     await cb.message.answer('<b>Запланированные задания</b> успешно изменены',
-#                             reply_markup=kb.member_menu_kb)
-#     await member_reset(state)
 
 
 @dp.message_handler(text='✅ Закрытые цели', state=SessionRole.member)
@@ -858,5 +774,3 @@ async def listening_comment(msg: Message, state: FSMContext):
                          reply_markup=kb.member_menu_kb)
     await member_reset(state)
     await state.update_data(msg=m)
-
-

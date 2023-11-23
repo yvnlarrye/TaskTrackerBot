@@ -1,7 +1,7 @@
 import asyncio
 from aiogram import executor
 from aiogram.utils.exceptions import TelegramAPIError
-
+from google.google_manager import init_google_service
 from dispatcher import dp
 from handlers import general, member, admin
 
@@ -13,6 +13,7 @@ async def on_startup(_):
     print('Bot has been successfully started.')
     await sqlite_db.db_connect()
     print('Connected to database')
+    init_google_service()
     asyncio.create_task(scheduler())
 
 

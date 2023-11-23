@@ -51,6 +51,7 @@ class CreateReport(StatesGroup):
     list_of_done_tasks = State()
     list_of_not_done_tasks = State()
     list_of_scheduled_tasks = State()
+    screenshots = State()
 
 
 class EditReport(StatesGroup):
