@@ -93,7 +93,7 @@ def create_points_table():
         'user_id INTEGER REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL, '
         'amount  REAL NOT NULL, '
         'date    TEXT    DEFAULT (date("now") )  NOT NULL, '
-        'comment TEXT    NOT NULL'
+        'comment TEXT'
         ')'
     )
 
