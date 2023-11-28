@@ -1,16 +1,16 @@
 import datetime
 
 from googleapiclient.http import MediaFileUpload
-from google.Google import Create_Service
+from google.google_service import Create_Service
+from google.config import DRIVE_CREDENTIALS_FILE
 
 
 def init_google_service():
-    CLIENT_SECRET_FILE = 'google/client_secrets.json'
     API_NAME = 'drive'
     API_VERSION = 'v3'
     SCOPES = ['https://www.googleapis.com/auth/drive']
     global service
-    service = Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+    service = Create_Service(DRIVE_CREDENTIALS_FILE, API_NAME, API_VERSION, SCOPES)
 
 
 def get_folder_files(folder_id) -> list:
@@ -24,7 +24,7 @@ def get_folder_files(folder_id) -> list:
     return root_folder_files
 
 
-def upload_request_content(user: tuple, file_name: str, file_loc: str, root_folder_id: str) -> str:
+def upload_content(user: tuple, file_name: str, file_loc: str, root_folder_id: str) -> str:
     root_folder_files = get_folder_files(root_folder_id)
     user_folder = f"{user[0]}_{user[4]}_{user[5]}"
     for file in root_folder_files:

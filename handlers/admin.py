@@ -1,21 +1,24 @@
+import asyncio
 import json
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.types import (
     Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 )
-from aiogram.utils.exceptions import MessageToEditNotFound, MessageIdInvalid
 
 from dispatcher import dp, bot
+from google.sheet_manager import append_row_in_table
 from keyboards import keyboards as kb
 from utils.reports import update_report_message
 from utils.request import update_request_message
 
-from utils.utils import is_admin, requestContainsUser
+from utils.utils import is_admin, requestContainsUser, get_status_icon, format_points_data_for_table
 from data import sqlite_db
 from states import SessionRole, UserEdition, Channel, Points, EditRequest
 from data.config import CONFIG, STATUS
 from utils.utils import delete_prev_message
+from datetime import datetime
+from data import config as cfg
 
 
 async def admin_start(msg: Message, state: FSMContext):
@@ -36,7 +39,8 @@ async def admin_reset(state: FSMContext):
                                                       UserEdition.member,
                                                       UserEdition.remove_member,
                                                       Points.add_amount,
-                                                      Points.reduce_amount])
+                                                      Points.reduce_amount, Points.add_comment,
+                                                      Points.reduce_comment])
 async def back_to_admin_menu(msg: Message, state: FSMContext):
     await admin_start(msg, state)
 
@@ -210,14 +214,20 @@ async def points(msg: Message, state: FSMContext):
 
 
 @dp.message_handler(text='📊 Начислить баллы', state=SessionRole.admin)
-async def add_points(msg: Message, state: FSMContext):
+async def listening_add_comment(msg: Message, state: FSMContext):
+    await delete_prev_message(msg.from_id, state)
+    await msg.answer('Укажите комментарий, за что начислятся баллы 💬:', reply_markup=kb.prev_step_reply_kb)
+    await Points.add_comment.set()
+
+
+@dp.message_handler(state=Points.add_comment, content_types=['text'])
+async def add_comment(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     users = await sqlite_db.get_users()
     users = [user for user in users if user[1] not in CONFIG['hidden_users']]
     await msg.answer('Выберите одного или нескольких участников, кому хотите начислить баллы:',
                      reply_markup=(await kb.update_users_to_update_points(users)))
-    await state.update_data(role_state=(await state.get_state()).split(':')[1],
-                            curr_users=users)
+    await state.update_data(curr_users=users, comment=msg.text)
     await Points.add.set()
 
 
@@ -227,11 +237,17 @@ async def select_user_to_add_points(cb: CallbackQuery, state: FSMContext):
 
 
 @dp.callback_query_handler(text='next_step', state=Points.add)
-async def enter_points_amount_to_add(cb: CallbackQuery):
-    await cb.message.delete()
-    await cb.message.answer(f'Введите количество баллов, которое необходимо начислить выбранным пользователям:',
-                            reply_markup=kb.prev_step_reply_kb)
-    await Points.add_amount.set()
+async def enter_points_amount_to_add(cb: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    if 'selected_users' in data:
+        await cb.message.delete()
+        await cb.message.answer(f'Введите количество баллов, которое необходимо начислить выбранным пользователям:',
+                                reply_markup=kb.prev_step_reply_kb)
+        await Points.add_amount.set()
+    else:
+        m = await cb.message.answer('Необходимо выбрать хотя бы одного участника!')
+        await asyncio.sleep(2)
+        await m.delete()
 
 
 @dp.message_handler(state=Points.add_amount)
@@ -241,19 +257,21 @@ async def listening_points_amount_to_add(msg: Message, state: FSMContext):
         data = await state.get_data()
         curr_users = data['curr_users']
         selected_users_indices = data['selected_users']
+        comment = data['comment']
         for j, i in enumerate(selected_users_indices):
             user_id = curr_users[i][0]
             user_points = await sqlite_db.get_user_points(user_id)
             user_points += points_amount
-
-            await sqlite_db.add_points_to_user(user_id, points_amount)
-
+            await sqlite_db.add_points_to_user(user_id, points_amount, comment)
             await sqlite_db.update_user_points(user_id, user_points)
+            record_id = await sqlite_db.get_user_last_points_record_id(user_id)
+            row_data = await format_points_data_for_table(record_id, user_id, points_amount, None, comment)
+            append_row_in_table(table_name=cfg.CONFIG['points_sheet_name'], row_range='A:H', values=[row_data])
             if j == len(selected_users_indices) - 1:
-                await msg.answer(f'<b>{points_amount}</b> баллов начислены участнику @{curr_users[i][3]}',
+                await msg.answer(f'<b>{points_amount}</b> баллов начислены участнику <b>{curr_users[i][4]} {curr_users[i][5]}</b>',
                                  reply_markup=kb.admin_menu_kb)
             else:
-                await msg.answer(f'<b>{points_amount}</b> баллов начислены участнику @{curr_users[i][3]}')
+                await msg.answer(f'<b>{points_amount}</b> баллов начислены участнику <b>{curr_users[i][4]} {curr_users[i][5]}</b>')
 
         await admin_reset(state)
     except ValueError:
@@ -262,14 +280,20 @@ async def listening_points_amount_to_add(msg: Message, state: FSMContext):
 
 
 @dp.message_handler(text='🚫 Отнять баллы', state=SessionRole.admin)
-async def reduce_points(msg: Message, state: FSMContext):
+async def listening_reduce_comment(msg: Message, state: FSMContext):
+    await delete_prev_message(msg.from_id, state)
+    await msg.answer('Укажите комментарий, за что отнимаются баллы 💬:', reply_markup=kb.prev_step_reply_kb)
+    await Points.reduce_comment.set()
+
+
+@dp.message_handler(state=Points.reduce_comment, content_types=['text'])
+async def reduce_comment(msg: Message, state: FSMContext):
     await delete_prev_message(msg.from_id, state)
     users = await sqlite_db.get_users()
     users = [user for user in users if user[1] not in CONFIG['hidden_users']]
     await msg.answer('Выберите одного или несколько участников, у кого хотите отнять баллы:',
                      reply_markup=(await kb.update_users_to_update_points(users)))
-    await state.update_data(role_state=(await state.get_state()).split(':')[1],
-                            curr_users=users)
+    await state.update_data(comment=msg.text, curr_users=users)
     await Points.reduce.set()
 
 
@@ -279,11 +303,17 @@ async def select_user_to_reduce_points(cb: CallbackQuery, state: FSMContext):
 
 
 @dp.callback_query_handler(text='next_step', state=Points.reduce)
-async def enter_points_amount_to_reduce(cb: CallbackQuery):
-    await cb.message.delete()
-    await cb.message.answer(f'Введите количество баллов, которое необходимо отнять у выбранных пользователей:',
-                            reply_markup=kb.prev_step_reply_kb)
-    await Points.reduce_amount.set()
+async def enter_points_amount_to_reduce(cb: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    if 'selected_users' in data:
+        await cb.message.delete()
+        await cb.message.answer(f'Введите количество баллов, которое необходимо отнять у выбранных пользователей:',
+                                reply_markup=kb.prev_step_reply_kb)
+        await Points.reduce_amount.set()
+    else:
+        m = await cb.message.answer('Необходимо выбрать хотя бы одного участника!')
+        await asyncio.sleep(2)
+        await m.delete()
 
 
 @dp.message_handler(state=Points.reduce_amount)
@@ -293,19 +323,21 @@ async def listening_points_amount_to_reduce(msg: Message, state: FSMContext):
         data = await state.get_data()
         curr_users = data['curr_users']
         selected_users_indices = data['selected_users']
+        comment = data['comment']
         for j, i in enumerate(selected_users_indices):
             user_id = curr_users[i][0]
             user_points = await sqlite_db.get_user_points(user_id)
             user_points -= points_amount
-
-            await sqlite_db.add_points_to_user(user_id, -1 * points_amount)
-
+            await sqlite_db.add_points_to_user(user_id, -1 * points_amount, comment)
             await sqlite_db.update_user_points(user_id, user_points)
+            record_id = await sqlite_db.get_user_last_points_record_id(user_id)
+            row_data = await format_points_data_for_table(record_id, user_id, None, points_amount, comment)
+            append_row_in_table(table_name=cfg.CONFIG['points_sheet_name'], row_range='A:H', values=[row_data])
             if j == len(selected_users_indices) - 1:
-                await msg.answer(f'<b>{points_amount}</b> баллов вычтены у пользователя @{curr_users[i][3]}',
+                await msg.answer(f'<b>{points_amount}</b> баллов вычтены у пользователя <b>{curr_users[i][4]} {curr_users[i][5]}</b>',
                                  reply_markup=kb.admin_menu_kb)
             else:
-                await msg.answer(f'<b>{points_amount}</b> баллов вычтены у пользователя @{curr_users[i][3]}')
+                await msg.answer(f'<b>{points_amount}</b> баллов вычтены у пользователя <b>{curr_users[i][4]} {curr_users[i][5]}</b>')
 
         await admin_reset(state)
     except ValueError:

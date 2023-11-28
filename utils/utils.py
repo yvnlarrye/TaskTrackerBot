@@ -2,8 +2,10 @@ from aiogram.dispatcher import FSMContext
 from aiogram.utils.exceptions import MessageToDeleteNotFound
 from data import sqlite_db
 from dispatcher import bot
-from data.config import STATUS
+from data.config import STATUS, CONFIG
 import datetime
+
+from google.sheet_manager import append_row_in_table
 
 
 async def is_admin(telegram_id: int) -> bool:
@@ -200,11 +202,68 @@ async def distribute_points(user_id: int, check_amount: int):
     if multiplicity:
         points = multiplicity * 30
         curr_points = await sqlite_db.get_user_points(user_id)
-        await sqlite_db.add_points_to_user(user_id, points)
+        comment = 'закрытая цель'
+        await sqlite_db.add_points_to_user(user_id, points, comment)
         await sqlite_db.update_user_points(user_id, curr_points + points)
+
+        record_id = await sqlite_db.get_user_last_points_record_id(user_id)
+        row_data = await format_points_data_for_table(record_id, user_id, points, None, comment)
+
+        append_row_in_table(table_name=CONFIG['points_sheet_name'],
+                            row_range='A:H',
+                            values=[row_data])
         telegram_id = (await sqlite_db.get_user_by_id(user_id))[1]
         try:
             await bot.send_message(chat_id=telegram_id,
                                    text=f'Ты заработал <b>{points}</b> баллов 🎯 за очередные <b>{multiplicity * interval}</b>💰!')
         except:
             pass
+
+
+async def format_goal_data_for_table(author: tuple, shared_link: str):
+    goal_id = await sqlite_db.get_user_last_goal_id(author[0])
+    goal = await sqlite_db.get_goal_by_id(goal_id)
+    username = author[3]
+    surname = author[5]
+    first_name = author[4]
+    user_status = author[7]
+    notion_link = goal[2]
+    check_amount = goal[3]
+    comment = goal[4]
+
+    return [
+        str(goal_id),
+        datetime.datetime.now().strftime('%d.%m.%y %H:%M'),
+        f"https://t.me/{username}",
+        f"{first_name} {surname}",
+        f'{get_status_icon(user_status)} {user_status}',
+        notion_link,
+        check_amount,
+        comment,
+        shared_link
+    ]
+
+
+async def format_points_data_for_table(record_id: int,
+                                       user_id: int,
+                                       add_points_amount: float | None,
+                                       reduce_points_amount: float | None,
+                                       comment: str):
+
+    user = await sqlite_db.get_user_by_id(user_id)
+
+    username = user[3]
+    surname = user[5]
+    first_name = user[4]
+    user_status = user[7]
+
+    return [
+        str(record_id),
+        datetime.datetime.now().strftime('%d.%m.%y %H:%M'),
+        f"https://t.me/{username}",
+        f"{first_name} {surname}",
+        f'{get_status_icon(user_status)} {user_status}',
+        add_points_amount,
+        reduce_points_amount,
+        comment
+    ]

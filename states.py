@@ -71,6 +71,8 @@ class Channel(StatesGroup):
 
 
 class Points(StatesGroup):
+    add_comment = State()
+    reduce_comment = State()
     add = State()
     add_amount = State()
     reduce = State()

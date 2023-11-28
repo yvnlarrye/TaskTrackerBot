@@ -1,7 +1,8 @@
 {
     "channels": {
         "report_channel": -1001980530409,
-        "request_channel": -1001901646542
+        "request_channel": -1001901646542,
+        "goals_channel": -1001980530409
     },
     "request_status": {
         "not_done": "❌ — Не выполнено",
@@ -28,7 +29,7 @@
         },
         "black": {
             "value": "Black",
-            "icon": "☠️"
+            "icon": "\uD83C\uDFF4\u200D☠️"
         },
         "red": {
             "value": "Red",
@@ -37,6 +38,7 @@
     },
     "video_folder_id": "1DVg1AQNT1c1a9WA0swB4nLRoWz1ta1Vs",
     "screenshots_folder_id": "1MMj5VqaIJwjV6yp-gZT8GvpZAnXsl2C_",
+    "goals_content_folder_id": "1qD5e7--nNH_jXo5fxULogT5cTyv553h5",
     "hashtags": [
         {
             "name": "#Продажи",
@@ -90,5 +92,10 @@
     "report_time": {
         "start": "18:00",
         "end": "20:00"
-    }
+    },
+    "spreadsheetId": "1xxG-w-i8fjF42L3zHMHSs1yMgtJVkjui1xroHd6S49I",
+    "request_sheet_name": "\uD83D\uDCDD Запросы",
+    "report_sheet_name": "\uD83D\uDCCA Отчеты",
+    "goal_sheet_name": "\uD83C\uDFAF Закрытые цели",
+    "points_sheet_name": "☑️ Баллы"
 }

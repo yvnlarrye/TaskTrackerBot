@@ -8,7 +8,8 @@ from aiogram.utils.markdown import hlink
 from data import sqlite_db
 from data.config import CONFIG
 from dispatcher import bot
-from utils.utils import get_status_icon, curr_datetime, is_user_recipient
+from google.sheet_manager import append_row_in_table
+from utils.utils import get_status_icon, curr_datetime, is_user_recipient, format_points_data_for_table
 from calendar import monthrange
 
 
@@ -190,12 +191,32 @@ async def report_track():
         user_id = user[0]
         user_reports_count = await sqlite_db.count_user_reports_per_day(user_id)
 
-        points_amount = 1 if user_reports_count else -1
+        add_points_amount = None
+        reduce_points_amount = None
+        if user_reports_count:
+            points_amount = 1
+            add_points_amount = 1
+            comment = 'сделан отчёт'
+        else:
+            points_amount = -1
+            reduce_points_amount = 1
+            comment = 'не сделан отчёт'
+
         user_points = await sqlite_db.get_user_points(user_id)
         user_points += points_amount
-        await sqlite_db.add_points_to_user(user_id, points_amount)
 
+        await sqlite_db.add_points_to_user(user_id, points_amount, comment)
         await sqlite_db.update_user_points(user_id, user_points)
+        record_id = await sqlite_db.get_user_last_points_record_id(user_id)
+
+        row_data = await format_points_data_for_table(record_id=record_id,
+                                                      user_id=user_id,
+                                                      add_points_amount=add_points_amount,
+                                                      reduce_points_amount=reduce_points_amount,
+                                                      comment=comment)
+        append_row_in_table(table_name=CONFIG['points_sheet_name'],
+                            row_range='A:H',
+                            values=[row_data])
 
 
 async def tasks_clean():

@@ -92,7 +92,8 @@ def create_points_table():
         'id      INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE, '
         'user_id INTEGER REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE NOT NULL, '
         'amount  REAL NOT NULL, '
-        'date    TEXT    DEFAULT (date("now") )  NOT NULL'
+        'date    TEXT    DEFAULT (date("now") )  NOT NULL, '
+        'comment TEXT    NOT NULL'
         ')'
     )
 
@@ -197,6 +198,13 @@ async def get_request_by_id(request_id: int):
     return result.fetchone()
 
 
+async def get_goal_by_id(goal_id: int):
+    result = cur.execute(
+        "SELECT * FROM goals WHERE id = ?", (goal_id,)
+    )
+    return result.fetchone()
+
+
 async def get_all_requests():
     result = cur.execute("SELECT * FROM requests")
     return result.fetchall()
@@ -297,7 +305,19 @@ async def get_user_last_request_id(user_id: int):
 async def get_user_last_report_id(user_id: int):
     result = cur.execute("SELECT id FROM reports WHERE author_id = ? ORDER BY id DESC LIMIT 1",
                          (user_id,))
-    return result.fetchone()
+    return result.fetchone()[0]
+
+
+async def get_user_last_goal_id(user_id: int):
+    result = cur.execute("SELECT id FROM goals WHERE author_id = ? ORDER BY id DESC LIMIT 1",
+                         (user_id,))
+    return result.fetchone()[0]
+
+
+async def get_user_last_points_record_id(user_id: int):
+    result = cur.execute("SELECT id FROM points WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+                         (user_id,))
+    return result.fetchone()[0]
 
 
 async def add_message_id_to_report(report_id, message_id: int):
@@ -421,9 +441,9 @@ async def get_user_earned_per_day(user_id: int):
     return result.fetchall()
 
 
-async def add_points_to_user(user_id: int, amount: float):
+async def add_points_to_user(user_id: int, amount: float, comment: str):
     cur.execute(
-        "INSERT INTO points (user_id, amount) VALUES (?, ?)", (user_id, amount)
+        "INSERT INTO points (user_id, amount, comment) VALUES (?, ?, ?)", (user_id, amount, comment,)
     )
     db.commit()
 

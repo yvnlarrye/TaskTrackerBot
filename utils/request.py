@@ -1,12 +1,14 @@
 import asyncio
+import datetime
 
 from aiogram.dispatcher import FSMContext
 from aiogram.types import CallbackQuery
 from aiogram.utils.exceptions import MessageNotModified, MessageToEditNotFound, MessageIdInvalid
 from data import sqlite_db
 from data.config import REQUEST_STATUS, CONFIG
+from google.sheet_manager import append_row_in_table
 from keyboards import keyboards as kb
-from utils.utils import format_addressers, format_recipients, get_status_icon
+from utils.utils import format_addressers, format_recipients, get_status_icon, format_points_data_for_table
 from dispatcher import bot
 from aiogram.utils.markdown import hlink
 
@@ -99,7 +101,7 @@ async def commit_request(data: dict):
                                 serial_number=serial_number)
 
 
-def print_request(serial_number: int, status: int, addressers: list, main_recipient: tuple,
+def print_request(serial_number: int, status: str, addressers: list, main_recipient: tuple,
                   secondary_recipient: tuple, text: str, date: str, video_link=None, hashtag_indices: list = None):
     addr_output = '\n'.join([
         f"{hlink(f'{addresser[1]} {addresser[2]}', f'tg://user?id={addresser[0]}')} — {get_status_icon(addresser[3])} {addresser[3]}"
@@ -215,17 +217,62 @@ async def update_req_recipients_points(req, update_mode: str):
     if sign is not None:
         main_recipient_id = await sqlite_db.get_user_id(int(req[4]))
         main_recipient_rate = await sqlite_db.get_user_points(main_recipient_id)
-        main_recipient_rate += coefficient * 2 * sign
-        await sqlite_db.add_points_to_user(main_recipient_id, coefficient * 2 * sign)
+        increase_amount = coefficient * 2 * sign
+        main_recipient_rate += increase_amount
+
+        add_points_amount = None
+        reduce_points_amount = None
+        comment = ''
+        if increase_amount > 0:
+            add_points_amount = abs(increase_amount)
+            comment = 'выполненный запрос'
+        elif increase_amount < 0:
+            reduce_points_amount = abs(increase_amount)
+            comment = 'не выполненный запрос'
+
+        await sqlite_db.add_points_to_user(main_recipient_id, increase_amount, comment)
         await sqlite_db.update_user_points(main_recipient_id, main_recipient_rate)
+
+        record_id = await sqlite_db.get_user_last_points_record_id(main_recipient_id)
+        row_data = await format_points_data_for_table(record_id,
+                                                      main_recipient_id,
+                                                      add_points_amount,
+                                                      reduce_points_amount,
+                                                      comment)
+
+        append_row_in_table(table_name=CONFIG['points_sheet_name'],
+                            row_range='A:H',
+                            values=[row_data])
 
         secondary_recipient = req[5]
         if secondary_recipient != '':
             secondary_recipient_id = await sqlite_db.get_user_id(int(secondary_recipient))
             recipient_rate = await sqlite_db.get_user_points(secondary_recipient_id)
-            recipient_rate += coefficient * sign
-            await sqlite_db.add_points_to_user(secondary_recipient_id, coefficient * sign)
+            increase_amount = coefficient * sign
+            recipient_rate += increase_amount
+
+            add_points_amount = None
+            reduce_points_amount = None
+            comment = None
+            if increase_amount > 0:
+                add_points_amount = abs(increase_amount)
+                comment = 'выполненный запрос'
+            elif increase_amount < 0:
+                reduce_points_amount = abs(increase_amount)
+                comment = 'не выполненный запрос'
+
+            await sqlite_db.add_points_to_user(secondary_recipient_id, coefficient * sign, comment)
             await sqlite_db.update_user_points(secondary_recipient_id, recipient_rate)
+            record_id = await sqlite_db.get_user_last_points_record_id(main_recipient_id)
+            row_data = await format_points_data_for_table(record_id,
+                                                          main_recipient_id,
+                                                          add_points_amount,
+                                                          reduce_points_amount,
+                                                          comment)
+
+            append_row_in_table(table_name=CONFIG['points_sheet_name'],
+                                row_range='A:H',
+                                values=[row_data])
 
 
 async def update_request_hashtags(cb: CallbackQuery, state: FSMContext):
@@ -249,3 +296,42 @@ async def update_request_hashtags(cb: CallbackQuery, state: FSMContext):
                                 message_id=cb.message.message_id,
                                 text=data['message_text'],
                                 reply_markup=new_keyboard)
+
+
+async def format_request_data_for_table(request_id: int, author: tuple,  serial_number: int):
+    request = await sqlite_db.get_request_by_id(request_id)
+
+    username = author[3]
+    surname = author[5]
+    first_name = author[4]
+    user_status = author[7]
+
+    addressers_ids = request[3].split('\n')
+    addressers = []
+    for telegram_id in addressers_ids:
+        user_id = await sqlite_db.get_user_id(int(telegram_id))
+        addresser = await sqlite_db.get_user_by_id(user_id)
+        addressers.append(addresser)
+
+    addressers_str = ', '.join([f'{addresser[4]} {addresser[5]}' for addresser in addressers])
+
+    main_recipient_id = await sqlite_db.get_user_id(int(request[4]))
+    main_recipient = await sqlite_db.get_user_by_id(main_recipient_id)
+
+    secondary_recipient_id = await sqlite_db.get_user_id(int(request[4]))
+    secondary_recipient = await sqlite_db.get_user_by_id(secondary_recipient_id)
+
+    return [
+        str(request_id),
+        datetime.datetime.now().strftime('%d.%m.%y %H:%M'),
+        str(serial_number),
+        REQUEST_STATUS['in_progress'],
+        f"https://t.me/{username}",
+        f"{first_name} {surname}",
+        f'{get_status_icon(user_status)} {user_status}',
+        addressers_str,
+        f'{main_recipient[4]} {main_recipient[5]}',
+        f'{secondary_recipient[4]} {secondary_recipient[5]}' if request[4] != '' else None,
+        request[6],
+        request[7]
+    ]

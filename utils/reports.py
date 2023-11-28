@@ -96,3 +96,29 @@ async def update_selected_done_tasks(cb: CallbackQuery, state: FSMContext, text:
                                 message_id=cb.message.message_id,
                                 text=text,
                                 reply_markup=new_keyboard)
+
+
+async def format_report_data_for_table(report_id: int, author: tuple, folder_link: str):
+    report = await sqlite_db.get_report_by_id(report_id)
+    earned = report[2]
+    done_tasks_count = len(report[3].split('\n'))
+    not_done_tasks_count = len(report[4].split('\n'))
+    scheduled_tasks_count = len(report[5].split('\n'))
+    username = author[3]
+    surname = author[5]
+    first_name = author[4]
+    user_status = author[7]
+
+    return [
+        str(report_id),
+        datetime.datetime.now().strftime('%d.%m.%y %H:%M'),
+        str(report_id),
+        f"https://t.me/{username}",
+        f"{first_name} {surname}",
+        f'{get_status_icon(user_status)} {user_status}',
+        earned,
+        folder_link,
+        done_tasks_count,
+        not_done_tasks_count,
+        scheduled_tasks_count
+    ]
