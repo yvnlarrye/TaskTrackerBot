@@ -240,14 +240,15 @@ async def select_user_to_add_points(cb: CallbackQuery, state: FSMContext):
 async def enter_points_amount_to_add(cb: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     if 'selected_users' in data:
-        await cb.message.delete()
-        await cb.message.answer(f'Введите количество баллов, которое необходимо начислить выбранным пользователям:',
-                                reply_markup=kb.prev_step_reply_kb)
-        await Points.add_amount.set()
-    else:
-        m = await cb.message.answer('Необходимо выбрать хотя бы одного участника!')
-        await asyncio.sleep(2)
-        await m.delete()
+        if len(data['selected_users']):
+            await cb.message.delete()
+            await cb.message.answer(f'Введите количество баллов, которое необходимо начислить выбранным пользователям:',
+                                    reply_markup=kb.prev_step_reply_kb)
+            await Points.add_amount.set()
+            return
+    m = await cb.message.answer('Необходимо выбрать хотя бы одного участника!')
+    await asyncio.sleep(2)
+    await m.delete()
 
 
 @dp.message_handler(state=Points.add_amount)

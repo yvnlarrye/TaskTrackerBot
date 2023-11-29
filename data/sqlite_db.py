@@ -23,7 +23,7 @@ def create_users_table():
         "username    TEXT    UNIQUE,"
         "first_name  TEXT    NOT NULL,"
         "surname     TEXT    NOT NULL,"
-        "points      REAL    DEFAULT (0),"
+        "points      REAL    DEFAULT (0) NOT NULL,"
         "status      TEXT    DEFAULT White NOT NULL"
         ")"
     )
