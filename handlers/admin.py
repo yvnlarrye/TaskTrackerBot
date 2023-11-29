@@ -200,10 +200,13 @@ async def upd_selected_users(cb: CallbackQuery, state: FSMContext, text: str):
     await state.update_data(selected_users=users_indices)
     curr_users = data['curr_users']
     new_keyboard = await kb.update_users_to_update_points(curr_users, users_indices)
-    await bot.edit_message_text(chat_id=cb.message.chat.id,
-                                message_id=cb.message.message_id,
-                                text=text,
-                                reply_markup=new_keyboard)
+    try:
+        await bot.edit_message_text(chat_id=cb.message.chat.id,
+                                    message_id=cb.message.message_id,
+                                    text=text,
+                                    reply_markup=new_keyboard)
+    except Exception as ex:
+        print(ex)
 
 
 @dp.message_handler(text='📊 Баллы', state=SessionRole.admin)

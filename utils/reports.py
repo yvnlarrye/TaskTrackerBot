@@ -101,9 +101,19 @@ async def update_selected_done_tasks(cb: CallbackQuery, state: FSMContext, text:
 async def format_report_data_for_table(report_id: int, author: tuple, folder_link: str):
     report = await sqlite_db.get_report_by_id(report_id)
     earned = report[2]
-    done_tasks_count = len(report[3].split('\n'))
-    not_done_tasks_count = len(report[4].split('\n'))
-    scheduled_tasks_count = len(report[5].split('\n'))
+
+    done_tasks_count = 0
+    if report[3]:
+        done_tasks_count = len(report[3].split('\n'))
+
+    not_done_tasks_count = 0
+    if report[4]:
+        not_done_tasks_count = len(report[4].split('\n'))
+
+    scheduled_tasks_count = 0
+    if report[5]:
+        scheduled_tasks_count = len(report[5].split('\n'))
+
     username = author[3]
     surname = author[5]
     first_name = author[4]

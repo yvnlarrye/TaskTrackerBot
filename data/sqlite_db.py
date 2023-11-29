@@ -276,16 +276,10 @@ async def get_user_requests(author_id: int):
 
 async def add_report(author_id: int, earned: str, scheduled_tasks: str,
                      done_tasks: str = None, not_done_tasks: str = None):
-    if done_tasks is None and not_done_tasks is None:
-        cur.execute(
-            "INSERT INTO reports (author_id, earned, scheduled_tasks) "
-            "values (?, ?, ?)", (author_id, earned, scheduled_tasks,)
-        )
-    else:
-        cur.execute(
-            "INSERT INTO reports (author_id, earned, done_tasks, not_done_tasks, scheduled_tasks) "
-            "values (?, ?, ?, ?, ?)", (author_id, earned, done_tasks, not_done_tasks, scheduled_tasks,)
-        )
+    cur.execute(
+        "INSERT INTO reports (author_id, earned, done_tasks, not_done_tasks, scheduled_tasks) "
+        "values (?, ?, ?, ?, ?)", (author_id, earned, done_tasks, not_done_tasks, scheduled_tasks,)
+    )
     db.commit()
 
 

@@ -318,7 +318,7 @@ async def format_request_data_for_table(request_id: int, author: tuple,  serial_
     main_recipient_id = await sqlite_db.get_user_id(int(request[4]))
     main_recipient = await sqlite_db.get_user_by_id(main_recipient_id)
 
-    secondary_recipient_id = await sqlite_db.get_user_id(int(request[4]))
+    secondary_recipient_id = await sqlite_db.get_user_id(int(request[5]))
     secondary_recipient = await sqlite_db.get_user_by_id(secondary_recipient_id)
 
     return [

@@ -94,20 +94,21 @@ async def commit_report(data: dict):
         for task in curr_tasks:
             await sqlite_db.remove_scheduled_task_by_id(task[0])
 
-    if 'done_tasks' in data and 'not_done_tasks' in data:
+    done_tasks = None
+    not_done_tasks = None
+
+    if 'done_tasks' in data:
         done_tasks = data['done_tasks']
-        not_done_tasks = data['not_done_tasks']
         done_tasks = '\n'.join([task[2] for task in done_tasks])
+    if 'not_done_tasks' in data:
+        not_done_tasks = data['not_done_tasks']
         not_done_tasks = '\n'.join([task[2] for task in not_done_tasks])
-        await sqlite_db.add_report(author_id=user_id,
-                                   earned=earned,
-                                   done_tasks=done_tasks,
-                                   not_done_tasks=not_done_tasks,
-                                   scheduled_tasks=scheduled_tasks)
-    else:
-        await sqlite_db.add_report(author_id=user_id,
-                                   earned=earned,
-                                   scheduled_tasks=scheduled_tasks)
+
+    await sqlite_db.add_report(author_id=user_id,
+                               earned=earned,
+                               done_tasks=done_tasks,
+                               not_done_tasks=not_done_tasks,
+                               scheduled_tasks=scheduled_tasks)
 
 
 async def delete_prev_message(chat_id, state: FSMContext):
