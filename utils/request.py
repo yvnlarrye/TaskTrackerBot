@@ -317,9 +317,13 @@ async def format_request_data_for_table(request_id: int, author: tuple,  serial_
 
     main_recipient_id = await sqlite_db.get_user_id(int(request[4]))
     main_recipient = await sqlite_db.get_user_by_id(main_recipient_id)
+    main_recipient_name = f'{main_recipient[4]} {main_recipient[5]}'
 
-    secondary_recipient_id = await sqlite_db.get_user_id(int(request[5]))
-    secondary_recipient = await sqlite_db.get_user_by_id(secondary_recipient_id)
+    secondary_recipient_name = None
+    if request[5] != '' and request[5] is not None:
+        secondary_recipient_id = await sqlite_db.get_user_id(int(request[5]))
+        secondary_recipient = await sqlite_db.get_user_by_id(secondary_recipient_id)
+        secondary_recipient_name = f'{secondary_recipient[4]} {secondary_recipient[5]}'
 
     return [
         str(request_id),
@@ -330,8 +334,8 @@ async def format_request_data_for_table(request_id: int, author: tuple,  serial_
         f"{first_name} {surname}",
         f'{get_status_icon(user_status)} {user_status}',
         addressers_str,
-        f'{main_recipient[4]} {main_recipient[5]}',
-        f'{secondary_recipient[4]} {secondary_recipient[5]}' if request[4] != '' else None,
+        main_recipient_name,
+        secondary_recipient_name,
         request[6],
         request[7]
     ]

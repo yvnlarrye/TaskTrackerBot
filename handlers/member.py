@@ -560,33 +560,37 @@ async def listen_screenshots(msg: Message, state: FSMContext):
 
 @dp.callback_query_handler(text='apply_tasks', state=CreateReport.screenshots)
 async def enter_done_tasks(cb: CallbackQuery, state: FSMContext):
-    await done_tasks_f(cb.message, state)
+    data = await state.get_data()
+    photo_files = data['photos']
+    if len(photo_files):
+        await done_tasks_f(cb.message, state)
+    else:
+        m = await cb.message.answer('Необходимо загрузить хотя бы один скриншот.')
+        await asyncio.sleep(2)
+        await m.delete()
 
 
 async def done_tasks_f(msg: Message, state: FSMContext):
     try:
-        try:
-            await msg.delete()
-        except:
-            pass
-        user_id = await sqlite_db.get_user_id(msg.chat.id)
-        user_scheduled_tasks = await sqlite_db.get_user_scheduled_tasks(user_id)
-        if len(user_scheduled_tasks):
-            await state.update_data(user_id=msg.chat.id, curr_tasks=user_scheduled_tasks,
-                                    done_tasks_indices=[])
-            await msg.answer('✅ Выберите задачи, которые сегодня выполнили:\n'
-                             '(Не помеченные задачи автоматически будут иметь статус не выполненных)',
-                             reply_markup=kb.scheduled_tasks_kb(user_scheduled_tasks))
-            await CreateReport.list_of_done_tasks.set()
-        else:
-            message = await msg.answer('📝 Введите список запланированных на завтра задач:\n'
-                                       '(Отправьте задачи по одной, а в конце нажмите "Подтвердить")',
-                                       reply_markup=kb.apply_tasks_kb())
-            await state.update_data(msg_id=message.message_id, user_id=msg.chat.id,
-                                    new_scheduled_tasks=[])
-            await CreateReport.list_of_scheduled_tasks.set()
-    except ValueError:
-        await msg.answer('Неверный формат ввода. Попробуйте еще раз.')
+        await msg.delete()
+    except:
+        pass
+    user_id = await sqlite_db.get_user_id(msg.chat.id)
+    user_scheduled_tasks = await sqlite_db.get_user_scheduled_tasks(user_id)
+    if len(user_scheduled_tasks):
+        await state.update_data(user_id=msg.chat.id, curr_tasks=user_scheduled_tasks,
+                                done_tasks_indices=[])
+        await msg.answer('✅ Выберите задачи, которые сегодня выполнили:\n'
+                         '(Не помеченные задачи автоматически будут иметь статус не выполненных)',
+                         reply_markup=kb.scheduled_tasks_kb(user_scheduled_tasks))
+        await CreateReport.list_of_done_tasks.set()
+    else:
+        message = await msg.answer('📝 Введите список запланированных на завтра задач:\n'
+                                   '(Отправьте задачи по одной, а в конце нажмите "Подтвердить")',
+                                   reply_markup=kb.apply_tasks_kb())
+        await state.update_data(msg_id=message.message_id, user_id=msg.chat.id,
+                                new_scheduled_tasks=[])
+        await CreateReport.list_of_scheduled_tasks.set()
 
 
 @dp.callback_query_handler(Text(startswith='task_'), state=CreateReport.list_of_done_tasks)
@@ -676,7 +680,6 @@ async def apply_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
                                     done_tasks=done_tasks_descriptions,
                                     not_done_tasks=not_done_tasks_descriptions)
 
-        data = await state.get_data()
         photo_files = data['photos']
 
         folder_link = None
