@@ -243,7 +243,7 @@ async def scheduler():
     aioschedule.every().day.at(report_time['end']).do(report_track)
 
     clean_tasks_time = time(hour=int(report_time['end'].split(":")[0]),
-                            minute=int(report_time['end'].split(":")[1]) + 1).strftime("%H:%M")
+                            minute=int(report_time['end'].split(":")[1])).strftime("%H:%M")
 
     aioschedule.every().day.at(clean_tasks_time).do(tasks_clean)
 

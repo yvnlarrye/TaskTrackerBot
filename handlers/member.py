@@ -1,15 +1,20 @@
 import asyncio
 import os
 import re
+
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.types import (
     Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 )
 from aiogram.utils.markdown import hlink
+
+from data import sqlite_db, config as cfg
 from dispatcher import dp, bot
 from google.drive_manager import *
+from google.sheet_manager import append_row_in_table, update_request_in_table
 from keyboards import keyboards as kb
+from states import SessionRole, CreateRequest, CreateReport, UserEdition, EditRequest, EditReport, Goals
 from utils.reports import (
     print_report, update_selected_done_tasks, format_report_data_for_table
 )
@@ -19,13 +24,10 @@ from utils.request import (
 )
 from utils.utils import (
     format_recipients, format_addressers, commit_report, delete_prev_message, get_status_icon, distribute_points,
-    format_goal_data_for_table, format_points_data_for_table
+    format_goal_data_for_table
 )
-from states import SessionRole, CreateRequest, CreateReport, UserEdition, EditRequest, EditReport, Goals
-from datetime import datetime, time, date
 from utils.validators import validate_date
-from data import sqlite_db, config as cfg
-from google.sheet_manager import append_row_in_table
+from datetime import datetime, time, date
 
 
 async def member_start(msg: Message, state: FSMContext):
@@ -197,9 +199,7 @@ async def confirm_creating_request(cb: CallbackQuery, state: FSMContext):
                            text=data['text'],
                            date=data['date'])
 
-    row_data = await format_request_data_for_table(request_id=request_id,
-                                                   author=author,
-                                                   serial_number=serial_number)
+    row_data = await format_request_data_for_table(request_id)
     append_row_in_table(table_name=cfg.CONFIG['request_sheet_name'], row_range='A:L', values=[row_data])
 
     await cb.message.answer(output,
@@ -289,6 +289,8 @@ async def edit_request_status(cb: CallbackQuery, state: FSMContext):
                                 reply_markup=kb.prev_step_reply_kb)
         return
 
+    row_data = await format_request_data_for_table(request_id)
+
     if status == 2 and request_status != 2:
         m = await cb.message.answer(
             f'Отправь ссылку на <b>видео</b> 📺 с записью зума c Google диска или YouTube. Или загрузи сюда любой <b>файл</b> 📄 до 20 мб.\n\n'
@@ -305,6 +307,7 @@ async def edit_request_status(cb: CallbackQuery, state: FSMContext):
 
     await sqlite_db.update_request_status(request_id, status)
     await update_request_message(request_id)
+    update_request_in_table(row_data)
 
     await cb.message.answer('Статус запроса успешно обновлён',
                             reply_markup=kb.member_menu_kb)
@@ -319,6 +322,7 @@ async def skip_attaching_file(cb: CallbackQuery, state: FSMContext):
     await sqlite_db.update_request_status(request_id, 2)
     await update_request_message(request_id)
     await update_req_recipients_points(data['req'], '+')
+    # update_request_in_table(request_id)
 
     await cb.message.answer('Статус запроса успешно обновлён ✅',
                             reply_markup=kb.member_menu_kb)

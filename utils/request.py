@@ -4,13 +4,15 @@ import datetime
 from aiogram.dispatcher import FSMContext
 from aiogram.types import CallbackQuery
 from aiogram.utils.exceptions import MessageNotModified, MessageToEditNotFound, MessageIdInvalid
-from data import sqlite_db
-from data.config import REQUEST_STATUS, CONFIG
-from google.sheet_manager import append_row_in_table
-from keyboards import keyboards as kb
-from utils.utils import format_addressers, format_recipients, get_status_icon, format_points_data_for_table
-from dispatcher import bot
 from aiogram.utils.markdown import hlink
+
+from data import sqlite_db
+from data.config import CONFIG
+from dispatcher import bot
+from google.sheet_manager import append_row_in_table, update_request_in_table
+from keyboards import keyboards as kb
+from utils.utils import format_addressers, format_recipients, get_status_icon, format_points_data_for_table, \
+    request_status_str
 
 
 async def request_from_user(cb: CallbackQuery, state: FSMContext):
@@ -146,17 +148,6 @@ def print_request(serial_number: int, status: str, addressers: list, main_recipi
     return result
 
 
-def request_status_str(request_status: int):
-    if request_status == 0:
-        return REQUEST_STATUS['not_done']
-    elif request_status == 1:
-        return REQUEST_STATUS['in_progress']
-    elif request_status == 2:
-        return REQUEST_STATUS['done']
-    else:
-        raise AttributeError
-
-
 async def update_request_message(request_id, video_link=None, hashtag_indices: list = None):
     try:
         curr_request = await sqlite_db.get_request_by_id(request_id)
@@ -201,6 +192,9 @@ async def update_request_message(request_id, video_link=None, hashtag_indices: l
                 await bot.send_message(chat_id=CONFIG['channels']['knowledge_base'],
                                        text=new_output,
                                        reply_to_message_id=curr_tag_thread_id)
+
+        row_data = await format_request_data_for_table(request_id)
+        update_request_in_table(row_data)
 
     except (MessageToEditNotFound, MessageIdInvalid):
         await sqlite_db.remove_request_by_id(request_id)
@@ -298,14 +292,15 @@ async def update_request_hashtags(cb: CallbackQuery, state: FSMContext):
                                 reply_markup=new_keyboard)
 
 
-async def format_request_data_for_table(request_id: int, author: tuple,  serial_number: int):
+async def format_request_data_for_table(request_id: int):
     request = await sqlite_db.get_request_by_id(request_id)
-
+    author = await sqlite_db.get_user_by_id(request[1])
+    serial_number = request[10]
     username = author[3]
     surname = author[5]
     first_name = author[4]
     user_status = author[7]
-
+    request_status = request_status_str(request[2])
     addressers_ids = request[3].split('\n')
     addressers = []
     for telegram_id in addressers_ids:
@@ -329,7 +324,7 @@ async def format_request_data_for_table(request_id: int, author: tuple,  serial_
         str(request_id),
         datetime.datetime.now().strftime('%d.%m.%y %H:%M'),
         str(serial_number),
-        REQUEST_STATUS['in_progress'],
+        request_status,
         f"https://t.me/{username}",
         f"{first_name} {surname}",
         f'{get_status_icon(user_status)} {user_status}',

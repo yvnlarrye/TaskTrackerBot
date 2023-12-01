@@ -1,7 +1,9 @@
-import httplib2
 import apiclient
+import gspread
+import httplib2
 from oauth2client.service_account import ServiceAccountCredentials
 
+from data import config
 from google.config import SOURCE_SPREADSHEET, SHEETS_CREDENTIALS_FILE
 
 spreadsheetId = SOURCE_SPREADSHEET
@@ -24,3 +26,17 @@ def append_row_in_table(table_name: str, row_range: str, values: list):
             "values": values
         }
     ).execute()
+
+
+def update_request_in_table(row_data: list):
+    request_id = int(row_data[0])
+    gc = gspread.authorize(credentials)
+    spreadsheet = gc.open_by_key(spreadsheetId)
+    cfg = config.get()
+    request_sheet = spreadsheet.worksheet(cfg['request_sheet_name'])
+    try:
+        cell = request_sheet.find(str(request_id))
+        row = cell.row
+        request_sheet.update(f'A{row}:L{row}', [row_data])
+    except Exception as ex:
+        print(ex)

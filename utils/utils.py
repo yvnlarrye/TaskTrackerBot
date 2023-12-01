@@ -2,7 +2,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.utils.exceptions import MessageToDeleteNotFound
 from data import sqlite_db
 from dispatcher import bot
-from data.config import STATUS, CONFIG
+from data.config import STATUS, CONFIG, REQUEST_STATUS
 import datetime
 
 from google.sheet_manager import append_row_in_table
@@ -16,6 +16,17 @@ async def is_admin(telegram_id: int) -> bool:
     if role == 0:
         return False
     raise ValueError
+
+
+def request_status_str(request_status: int):
+    if request_status == 0:
+        return REQUEST_STATUS['not_done']
+    elif request_status == 1:
+        return REQUEST_STATUS['in_progress']
+    elif request_status == 2:
+        return REQUEST_STATUS['done']
+    else:
+        raise AttributeError
 
 
 def formatted_users_list(users: list):
