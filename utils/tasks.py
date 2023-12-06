@@ -227,6 +227,35 @@ async def tasks_clean():
         await sqlite_db.remove_scheduled_task_by_id(task[0])
 
 
+async def check_requests():
+    requests = await sqlite_db.get_all_requests()
+    for req in requests:
+        request_date = str(req[7])
+        request_status = req[2]
+
+        if (curr_datetime() - timedelta(days=2)).strftime('%d.%m.%y') == request_date and request_status == 1:
+            points_amount = -1
+            reduce_points_amount = 1
+            comment = 'не закрыт запрос'
+            author_id = req[1]
+
+            user_points = await sqlite_db.get_user_points(author_id)
+            user_points += points_amount
+
+            await sqlite_db.add_points_to_user(author_id, points_amount, comment)
+            await sqlite_db.update_user_points(author_id, user_points)
+            record_id = await sqlite_db.get_user_last_points_record_id(author_id)
+
+            row_data = await format_points_data_for_table(record_id=record_id,
+                                                          user_id=author_id,
+                                                          add_points_amount=None,
+                                                          reduce_points_amount=reduce_points_amount,
+                                                          comment=comment)
+            append_row_in_table(table_name=CONFIG['points_sheet_name'],
+                                row_range='A:H',
+                                values=[row_data])
+
+
 async def scheduler():
     aioschedule.every().day.at("23:59").do(send_daily_report)
     aioschedule.every().sunday.at("23:59").do(send_weekly_report)
@@ -246,6 +275,7 @@ async def scheduler():
                             minute=int(report_time['end'].split(":")[1])).strftime("%H:%M")
 
     aioschedule.every().day.at(clean_tasks_time).do(tasks_clean)
+    aioschedule.every().day.at("00:00").do(check_requests)
 
     while True:
         await aioschedule.run_pending()
