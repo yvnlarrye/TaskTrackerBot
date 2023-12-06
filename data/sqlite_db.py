@@ -41,8 +41,7 @@ def create_requests_table():
         'text                 TEXT      NOT NULL,'
         'date                 TEXT      NOT NULL,'
         'message_id           INTEGER   UNIQUE, '
-        'creation_date        TEXT      DEFAULT (date("now") ) NOT NULL, '
-        'serial_number        INTEGER NOT NULL UNIQUE DEFAULT (1)'
+        'creation_date        TEXT      DEFAULT (date("now") ) NOT NULL'
         ')'
     )
 
@@ -169,12 +168,12 @@ async def user_exists(telegram_id: int):
 
 
 async def add_request(author_id: int, status: int, addressers: str, main_recipient: str,
-                      secondary_recipient: str, text: str, date: str, serial_number: int):
+                      secondary_recipient: str, text: str, date: str):
     cur.execute(
         "INSERT INTO requests ("
-        "author_id, status, addressers, main_recipient, secondary_recipient, text, date, serial_number"
-        ") values (?, ?, ?, ?, ?, ?, ?, ?)",
-        (author_id, status, addressers, main_recipient, secondary_recipient, text, date, serial_number,)
+        "author_id, status, addressers, main_recipient, secondary_recipient, text, date"
+        ") values (?, ?, ?, ?, ?, ?, ?)",
+        (author_id, status, addressers, main_recipient, secondary_recipient, text, date,)
     )
     db.commit()
 
@@ -523,17 +522,3 @@ async def clear_reports():
     cur.execute("UPDATE SQLITE_SEQUENCE SET seq = 0 WHERE name = 'reports'")
     db.commit()
 
-
-async def update_last_request_serial_number():
-    cur.execute(
-        'UPDATE requests SET serial_number = 0 WHERE id = (SELECT id FROM requests ORDER BY id DESC LIMIT 1)'
-    )
-    db.commit()
-
-
-async def get_last_request_serial_number():
-    result = cur.execute("SELECT serial_number FROM requests ORDER BY id DESC LIMIT 1").fetchone()
-    if result:
-        return result[0]
-    else:
-        return 0

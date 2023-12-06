@@ -168,9 +168,7 @@ async def listening_request_date(msg: Message, state: FSMContext):
 
 @dp.callback_query_handler(text='confirm_request', state=CreateRequest.date)
 async def confirm_creating_request(cb: CallbackQuery, state: FSMContext):
-    last_req_serial_number = await sqlite_db.get_last_request_serial_number()
-    serial_number = last_req_serial_number + 1
-    await state.update_data(serial_number=serial_number, author_telegram_id=cb.from_user.id)
+    await state.update_data(author_telegram_id=cb.from_user.id)
     author = await sqlite_db.get_user_by_id(await sqlite_db.get_user_id(cb.from_user.id))
     data = await state.get_data()
     await commit_request(data)
@@ -191,7 +189,7 @@ async def confirm_creating_request(cb: CallbackQuery, state: FSMContext):
         )
     else:
         secondary_recipient = ()
-    output = print_request(serial_number=serial_number,
+    output = print_request(request_id=request_id,
                            status=cfg.REQUEST_STATUS['in_progress'],
                            addressers=addressers,
                            main_recipient=main_recipient,
@@ -322,7 +320,6 @@ async def skip_attaching_file(cb: CallbackQuery, state: FSMContext):
     await sqlite_db.update_request_status(request_id, 2)
     await update_request_message(request_id)
     await update_req_recipients_points(data['req'], '+')
-    # update_request_in_table(request_id)
 
     await cb.message.answer('Статус запроса успешно обновлён ✅',
                             reply_markup=kb.member_menu_kb)
@@ -649,66 +646,79 @@ async def listening_scheduled_tasks(msg: Message, state: FSMContext):
 
 @dp.callback_query_handler(text='apply_tasks', state=CreateReport.list_of_scheduled_tasks)
 async def apply_scheduled_tasks(cb: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    new_scheduled_tasks = data['new_scheduled_tasks']
+    report_time = cfg.get()['report_time']
+    time_restriction = cfg.get()['time_restriction']
+    left_time_parts = report_time['start'].split(':')
+    left_time = time(hour=int(left_time_parts[0]), minute=int(left_time_parts[1]))
+    right_time_parts = report_time['end'].split(':')
+    right_time = time(hour=int(right_time_parts[0]), minute=int(right_time_parts[1]))
 
-    if len(new_scheduled_tasks):
-        await cb.message.delete()
-        await commit_report(data)
+    if (left_time <= datetime.now().time() < right_time) or not time_restriction:
+        data = await state.get_data()
+        new_scheduled_tasks = data['new_scheduled_tasks']
 
-        author_id = await sqlite_db.get_user_id(cb.from_user.id)
-        report_id = await sqlite_db.get_user_last_report_id(author_id)
-        user = await sqlite_db.get_user_by_id(author_id)
-        surname = user[5]
-        first_name = user[4]
-        telegram_id = user[1]
-        user_status = user[7]
-        earned = data['earned']
+        if len(new_scheduled_tasks):
+            await cb.message.delete()
+            await commit_report(data)
 
-        user_transfer = (telegram_id, first_name, surname, user_status,)
+            author_id = await sqlite_db.get_user_id(cb.from_user.id)
+            report_id = await sqlite_db.get_user_last_report_id(author_id)
+            user = await sqlite_db.get_user_by_id(author_id)
+            surname = user[5]
+            first_name = user[4]
+            telegram_id = user[1]
+            user_status = user[7]
+            earned = data['earned']
 
-        done_tasks_descriptions = None
-        if 'done_tasks' in data:
-            done_tasks = data['done_tasks']
-            done_tasks_descriptions = [task[2] for task in done_tasks]
+            user_transfer = (telegram_id, first_name, surname, user_status,)
 
-        not_done_tasks_descriptions = None
-        if 'not_done_tasks' in data:
-            not_done_tasks = data['not_done_tasks']
-            not_done_tasks_descriptions = [task[2] for task in not_done_tasks]
+            done_tasks_descriptions = None
+            if 'done_tasks' in data:
+                done_tasks = data['done_tasks']
+                done_tasks_descriptions = [task[2] for task in done_tasks]
 
-        output = await print_report(report_id=report_id,
-                                    user=user_transfer,
-                                    earned=earned,
-                                    scheduled_tasks=new_scheduled_tasks,
-                                    done_tasks=done_tasks_descriptions,
-                                    not_done_tasks=not_done_tasks_descriptions)
+            not_done_tasks_descriptions = None
+            if 'not_done_tasks' in data:
+                not_done_tasks = data['not_done_tasks']
+                not_done_tasks_descriptions = [task[2] for task in not_done_tasks]
 
-        photo_files = data['photos']
+            output = await print_report(report_id=report_id,
+                                        user=user_transfer,
+                                        earned=earned,
+                                        scheduled_tasks=new_scheduled_tasks,
+                                        done_tasks=done_tasks_descriptions,
+                                        not_done_tasks=not_done_tasks_descriptions)
 
-        folder_link = None
-        for i, file in enumerate(photo_files):
-            file_loc = f'temp/{file}'
-            curr_date = date.today().strftime("%d.%m.%Y")
-            file_extension = file.split('.')[1]
-            file_name = f'{report_id}_{first_name}_{surname}_{curr_date}_{i + 1}.{file_extension}'
-            folder_link = upload_report_photo(user=user,
-                                              file_name=file_name,
-                                              file_loc=file_loc,
-                                              root_folder_id=cfg.CONFIG['screenshots_folder_id'], )
-            os.remove(file_loc)
+            photo_files = data['photos']
 
-        await cb.message.answer(output, reply_markup=kb.member_menu_kb)
-        msg = await bot.send_message(chat_id=cfg.CONFIG['channels']['report_channel'],
-                                     text=output)
-        await sqlite_db.add_message_id_to_report(report_id, msg.message_id)
-        row_data = await format_report_data_for_table(report_id=report_id, author=user, folder_link=folder_link)
-        append_row_in_table(table_name=cfg.CONFIG['report_sheet_name'], row_range='A:K', values=[row_data])
-        await member_reset(state)
+            folder_link = None
+            for i, file in enumerate(photo_files):
+                file_loc = f'temp/{file}'
+                curr_date = date.today().strftime("%d.%m.%Y")
+                file_extension = file.split('.')[1]
+                file_name = f'{report_id}_{first_name}_{surname}_{curr_date}_{i + 1}.{file_extension}'
+                folder_link = upload_report_photo(user=user,
+                                                  file_name=file_name,
+                                                  file_loc=file_loc,
+                                                  root_folder_id=cfg.CONFIG['screenshots_folder_id'], )
+                os.remove(file_loc)
+
+            await cb.message.answer(output, reply_markup=kb.member_menu_kb)
+            msg = await bot.send_message(chat_id=cfg.CONFIG['channels']['report_channel'],
+                                         text=output)
+            await sqlite_db.add_message_id_to_report(report_id, msg.message_id)
+            row_data = await format_report_data_for_table(report_id=report_id, author=user, folder_link=folder_link)
+            append_row_in_table(table_name=cfg.CONFIG['report_sheet_name'], row_range='A:K', values=[row_data])
+            await member_reset(state)
+        else:
+            m = await cb.message.answer('Необходимо ввести хотя бы одну задачу.')
+            await asyncio.sleep(2)
+            await m.delete()
     else:
-        m = await cb.message.answer('Необходимо ввести хотя бы одну задачу.')
-        await asyncio.sleep(2)
-        await m.delete()
+        await cb.message.answer(
+            text=f'Отчёт можно заполнить только в период с {report_time["start"]} до {report_time["end"]}.',
+            reply_markup=kb.member_menu_kb)
+        await member_reset(state)
 
 
 @dp.message_handler(text='✅ Закрытые цели', state=SessionRole.member)

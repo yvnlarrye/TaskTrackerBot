@@ -3,6 +3,7 @@
 data/config.json
 
 data/task_tracker_db.db
+/data/task_tracker_db.db
 .env
 /.env
 

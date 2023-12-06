@@ -91,7 +91,6 @@ async def commit_request(data: dict):
         secondary_recipient = ''
     text = data['text']
     date = data['date']
-    serial_number = data['serial_number']
 
     await sqlite_db.add_request(author_id=author_id,
                                 status=1,
@@ -99,11 +98,10 @@ async def commit_request(data: dict):
                                 main_recipient=main_recipient,
                                 secondary_recipient=secondary_recipient,
                                 text=text,
-                                date=date,
-                                serial_number=serial_number)
+                                date=date)
 
 
-def print_request(serial_number: int, status: str, addressers: list, main_recipient: tuple,
+def print_request(request_id: int, status: str, addressers: list, main_recipient: tuple,
                   secondary_recipient: tuple, text: str, date: str, video_link=None, hashtag_indices: list = None):
     addr_output = '\n'.join([
         f"{hlink(f'{addresser[1]} {addresser[2]}', f'tg://user?id={addresser[0]}')} — {get_status_icon(addresser[3])} {addresser[3]}"
@@ -127,7 +125,7 @@ def print_request(serial_number: int, status: str, addressers: list, main_recipi
         hashtags = CONFIG['hashtags']
         hashtags_output = '\n\n<b>Теги:</b>\n' + ' '.join([hashtags[i]['name'] for i in hashtag_indices])
 
-    result = f"Запрос #{serial_number}\n\n" \
+    result = f"Запрос #{request_id}\n\n" \
              f"<b>Статус:</b>\n" \
              f"{status}\n" \
              f"\n" \
@@ -155,7 +153,6 @@ async def update_request_message(request_id, video_link=None, hashtag_indices: l
         addressers = curr_request[3].split('\n')
         main_recipient = curr_request[4].strip()
         secondary_recipient = curr_request[5].strip()
-        serial_number = curr_request[10]
 
         addressers_transfer_data = []
         for telegram_id in addressers:
@@ -178,7 +175,7 @@ async def update_request_message(request_id, video_link=None, hashtag_indices: l
         text = curr_request[6]
         date = curr_request[7]
         message_id = curr_request[8]
-        new_output = print_request(serial_number, req_status, addressers_transfer_data, main_recipient_transfer_data,
+        new_output = print_request(request_id, req_status, addressers_transfer_data, main_recipient_transfer_data,
                                    secondary_recipient_transfer_data, text, date, video_link, hashtag_indices)
         try:
             await bot.edit_message_text(text=new_output, chat_id=CONFIG['channels']['request_channel'], message_id=message_id)
@@ -295,7 +292,6 @@ async def update_request_hashtags(cb: CallbackQuery, state: FSMContext):
 async def format_request_data_for_table(request_id: int):
     request = await sqlite_db.get_request_by_id(request_id)
     author = await sqlite_db.get_user_by_id(request[1])
-    serial_number = request[10]
     username = author[3]
     surname = author[5]
     first_name = author[4]
@@ -323,7 +319,7 @@ async def format_request_data_for_table(request_id: int):
     return [
         str(request_id),
         datetime.datetime.now().strftime('%d.%m.%y %H:%M'),
-        str(serial_number),
+        str(request_id),
         request_status,
         f"https://t.me/{username}",
         f"{first_name} {surname}",
