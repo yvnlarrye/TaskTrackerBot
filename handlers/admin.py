@@ -516,7 +516,10 @@ async def finish_user_status_edition(cb: CallbackQuery, state: FSMContext):
     for request in all_requests:
         if requestContainsUser(request, user):
             request_id = request[0]
-            await update_request_message(request_id)
+            try:
+                await update_request_message(request_id)
+            except TypeError as e:
+                print(e)
 
     await cb.message.answer(f'Статус пользователя @{user[3]} успешно обновлён.',
                             reply_markup=kb.admin_menu_kb)
