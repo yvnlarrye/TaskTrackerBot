@@ -296,6 +296,9 @@ async def format_request_data_for_table(request_id: int):
     surname = author[5]
     first_name = author[4]
     user_status = author[7]
+
+    request_date = '.'.join(reversed(str(request[9]).split('-')))
+
     request_status = request_status_str(request[2])
     addressers_ids = request[3].split('\n')
     addressers = []
@@ -318,7 +321,7 @@ async def format_request_data_for_table(request_id: int):
 
     return [
         str(request_id),
-        datetime.datetime.now().strftime('%d.%m.%y %H:%M'),
+        request_date,
         str(request_id),
         request_status,
         f"https://t.me/{username}",

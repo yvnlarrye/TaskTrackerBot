@@ -7,6 +7,7 @@ from aiogram.dispatcher.filters import Text
 from aiogram.types import (
     Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 )
+from aiogram.utils.exceptions import MessageToEditNotFound
 from aiogram.utils.markdown import hlink
 
 from data import sqlite_db, config as cfg
@@ -287,8 +288,6 @@ async def edit_request_status(cb: CallbackQuery, state: FSMContext):
                                 reply_markup=kb.prev_step_reply_kb)
         return
 
-    row_data = await format_request_data_for_table(request_id)
-
     if status == 2 and request_status != 2:
         m = await cb.message.answer(
             f'Отправь ссылку на <b>видео</b> 📺 с записью зума c Google диска или YouTube. Или загрузи сюда любой <b>файл</b> 📄 до 20 мб.\n\n'
@@ -305,7 +304,6 @@ async def edit_request_status(cb: CallbackQuery, state: FSMContext):
 
     await sqlite_db.update_request_status(request_id, status)
     await update_request_message(request_id)
-    update_request_in_table(row_data)
 
     await cb.message.answer('Статус запроса успешно обновлён',
                             reply_markup=kb.member_menu_kb)
@@ -636,12 +634,15 @@ async def listening_scheduled_tasks(msg: Message, state: FSMContext):
     await state.update_data(new_scheduled_tasks=scheduled_tasks_list)
     data = await state.get_data()
     append_text = '\n'.join(['- ' + task for task in data['new_scheduled_tasks']])
-    await bot.edit_message_text(text='📝 Введите список запланированных на завтра задач:\n'
-                                     '(Отправьте задачи по одной, а в конце нажмите "Подтвердить")\n\n'
-                                     f'{append_text}',
-                                chat_id=msg.from_id,
-                                message_id=data['msg_id'],
-                                reply_markup=kb.apply_tasks_kb())
+    try:
+        await bot.edit_message_text(text='📝 Введите список запланированных на завтра задач:\n'
+                                         '(Отправьте задачи по одной, а в конце нажмите "Подтвердить")\n\n'
+                                         f'{append_text}',
+                                    chat_id=msg.from_id,
+                                    message_id=data['msg_id'],
+                                    reply_markup=kb.apply_tasks_kb())
+    except MessageToEditNotFound as e:
+        print(e)
 
 
 @dp.callback_query_handler(text='apply_tasks', state=CreateReport.list_of_scheduled_tasks)

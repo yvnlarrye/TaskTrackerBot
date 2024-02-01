@@ -35,7 +35,7 @@ def update_request_in_table(row_data: list):
     cfg = config.get()
     request_sheet = spreadsheet.worksheet(cfg['request_sheet_name'])
     try:
-        cell = request_sheet.find(str(request_id))
+        cell = request_sheet.find(str(request_id), in_column=1)
         row = cell.row
         request_sheet.update(f'A{row}:L{row}', [row_data])
     except Exception as ex:
