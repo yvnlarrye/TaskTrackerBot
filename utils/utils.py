@@ -1,5 +1,5 @@
 from aiogram.dispatcher import FSMContext
-from aiogram.utils.exceptions import MessageToDeleteNotFound
+from aiogram.utils.exceptions import MessageToDeleteNotFound, MessageCantBeDeleted
 from data import sqlite_db
 from dispatcher import bot
 from data.config import STATUS, CONFIG, REQUEST_STATUS
@@ -127,7 +127,7 @@ async def delete_prev_message(chat_id, state: FSMContext):
     if 'msg' in data:
         try:
             await bot.delete_message(chat_id=chat_id, message_id=data['msg'].message_id)
-        except MessageToDeleteNotFound:
+        except (MessageToDeleteNotFound, MessageCantBeDeleted):
             pass
 
 
